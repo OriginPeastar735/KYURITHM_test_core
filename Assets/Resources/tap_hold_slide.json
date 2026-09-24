@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 4,
+    "totalNotes": 8
+  },
+  "notes": [
+    {
+      "id": 1790236299233.3416,
+      "type": "tap",
+      "lane": 8,
+      "width": 4,
+      "tick": 0
+    },
+    {
+      "id": 1790236340577.2097,
+      "type": "hold",
+      "lane": 16,
+      "width": 4,
+      "tick": 0
+    },
+    {
+      "id": 1790236383404.9517,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 20,
+            "width": 4,
+            "tick": 0
+          },
+          "to": {
+            "lane": 20,
+            "width": 4,
+            "tick": 1920
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1790236307496.827,
+      "type": "tap",
+      "lane": 12,
+      "width": 2,
+      "tick": 480
+    },
+    {
+      "id": 1790236396923.6067,
+      "type": "hold",
+      "lane": 16,
+      "width": 4,
+      "tick": 480
+    },
+    {
+      "id": 1790236312729.6694,
+      "type": "tap",
+      "lane": 14,
+      "width": 1,
+      "tick": 960
+    },
+    {
+      "id": 1790236399585.1423,
+      "type": "hold",
+      "lane": 16,
+      "width": 4,
+      "tick": 960
+    },
+    {
+      "id": 1790236402001.003,
+      "type": "hold",
+      "lane": 16,
+      "width": 4,
+      "tick": 1440
+    }
+  ]
+}

@@ -1,3 +1,6 @@
+//KYURITHM用にjsonファイル読み込みロジックを変更しています
+
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,7 +21,7 @@ public class NoteManager : MonoBehaviour
 
     public float bpm;
 
-    public int totalCombo =0;
+    public int totalCombo = 0;
 
     public float scrollSpeed = 200f;
 
@@ -33,36 +36,40 @@ public class NoteManager : MonoBehaviour
     {
         public float bar;
         public string type;
+        public int lane;
+        public int width;
+        public int tick;
     }
 
     [System.Serializable]
     public class NotesData
     {
         public float bpm;
-        public List<NoteData> SNotes;
-        public List<NoteData> DNotes;
-        public List<NoteData> FNotes;
-        public List<NoteData> JNotes;
-        public List<NoteData> KNotes;
-        public List<NoteData> LNotes;
-        public List<NoteData> DLongNotes;
-        public List<NoteData> FLongNotes;
-        public List<NoteData> JLongNotes;
-        public List<NoteData> KLongNotes;
+        public List<NoteData> notes;
+        // public List<NoteData> SNotes;
+        // public List<NoteData> DNotes;
+        // public List<NoteData> FNotes;
+        // public List<NoteData> JNotes;
+        // public List<NoteData> KNotes;
+        // public List<NoteData> LNotes;
+        // public List<NoteData> DLongNotes;
+        // public List<NoteData> FLongNotes;
+        // public List<NoteData> JLongNotes;
+        // public List<NoteData> KLongNotes;
     }
 
-    public List<Note> Notes = new List<Note>();
+    public List<Note> notes = new List<Note>();
     public List<LongNote> LongNotes = new List<LongNote>();
-    public List<Note> SNotes = new List<Note>();
-    public List<Note> DNotes = new List<Note>();
-    public List<Note> FNotes = new List<Note>();
-    public List<Note> JNotes = new List<Note>();
-    public List<Note> KNotes = new List<Note>();
-    public List<Note> LNotes = new List<Note>();
-    public List<LongNote> DLongNotes = new List<LongNote>();
-    public List<LongNote> FLongNotes = new List<LongNote>();
-    public List<LongNote> JLongNotes = new List<LongNote>();
-    public List<LongNote> KLongNotes = new List<LongNote>();
+    // public List<Note> SNotes = new List<Note>();
+    // public List<Note> DNotes = new List<Note>();
+    // public List<Note> FNotes = new List<Note>();
+    // public List<Note> JNotes = new List<Note>();
+    // public List<Note> KNotes = new List<Note>();
+    // public List<Note> LNotes = new List<Note>();
+    // public List<LongNote> DLongNotes = new List<LongNote>();
+    // public List<LongNote> FLongNotes = new List<LongNote>();
+    // public List<LongNote> JLongNotes = new List<LongNote>();
+    // public List<LongNote> KLongNotes = new List<LongNote>();
 
     private float[] previousExpectedTime = new float[4];//ロングノーツ描画のための一時変数
     private float[] previousNoteBar = new float[4];//ロングノーツ描画のための一時変数
@@ -95,134 +102,57 @@ public class NoteManager : MonoBehaviour
 
         totalCombo = 0;
 
-        totalCombo += notesData.SNotes.Count;
-        totalCombo += notesData.DNotes.Count;
-        totalCombo += notesData.FNotes.Count;
-        totalCombo += notesData.JNotes.Count;
-        totalCombo += notesData.KNotes.Count;
-        totalCombo += notesData.LNotes.Count;
-        totalCombo += notesData.DLongNotes.Count;
-        totalCombo += notesData.FLongNotes.Count;
-        totalCombo += notesData.JLongNotes.Count;
-        totalCombo += notesData.KLongNotes.Count;
+        totalCombo += notesData.notes.Count;
 
         bpm = notesData.bpm;
         barMillis = (60f / bpm) * 4f;
 
-        foreach (var note in notesData.SNotes)
+        //holdノートに使えるかも
+        // foreach (var note in notesData.SNotes)
+        // {
+        //     CreateIsoNote(note.bar, "S", DRailBase, note.type);
+        // }
+
+        foreach (var note in notesData.notes)
         {
-            CreateIsoNote(note.bar, "S", DRailBase, note.type);
+            if(note.type == "tap")
+            CreateNote(note.tick, note.lane, note.width, note.type);
         }
-        foreach (var note in notesData.DNotes)
-        {
-            CreateNote(note.bar, "D", DRailBase, note.type);
-        }
-        foreach (var note in notesData.FNotes)
-        {
-            CreateNote(note.bar, "F", FRailBase, note.type);
-        }
-        foreach (var note in notesData.JNotes)
-        {
-            CreateNote(note.bar, "J", JRailBase, note.type);
-        }
-        foreach (var note in notesData.KNotes)
-        {
-            CreateNote(note.bar, "K", KRailBase, note.type);
-        }
-        foreach (var note in notesData.LNotes)
-        {
-            CreateIsoNote(note.bar, "L", KRailBase, note.type);
-        }
-        foreach (var note in notesData.DLongNotes)
-        {
-            float expectedTime = startTime + note.bar * barMillis;
-            if (note.type == "s")
-            {
-                previousExpectedTime[D] = expectedTime;
-                previousNoteBar[D] = note.bar;
-            }
-            else if (note.type == "e")
-            {
-                CreateLongNote(previousNoteBar[D], note.bar, "D", DRailBase, previousExpectedTime[D], expectedTime);
-            }
-        }
-        foreach (var note in notesData.FLongNotes)
-        {
-            float expectedTime = startTime + note.bar * barMillis;
-            if (note.type == "s")
-            {
-                previousExpectedTime[F] = expectedTime;
-                previousNoteBar[F] = note.bar;
-            }
-            else if (note.type == "e")
-            {
-                CreateLongNote(previousNoteBar[F], note.bar, "F", FRailBase, previousExpectedTime[F], expectedTime);
-            }
-        }
-        foreach (var note in notesData.JLongNotes)
-        {
-            float expectedTime = startTime + note.bar * barMillis;
-            if (note.type == "s")
-            {
-                previousExpectedTime[J] = expectedTime;
-                previousNoteBar[J] = note.bar;
-            }
-            else if (note.type == "e")
-            {
-                CreateLongNote(previousNoteBar[J], note.bar, "J", JRailBase, previousExpectedTime[J], expectedTime);
-            }
-        }
-        foreach (var note in notesData.KLongNotes)
-        {
-            float expectedTime = startTime + note.bar * barMillis;
-            if (note.type == "s")
-            {
-                previousExpectedTime[K] = expectedTime;
-                previousNoteBar[K] = note.bar;
-            }
-            else if (note.type == "e")
-            {
-                CreateLongNote(previousNoteBar[K], note.bar, "K", KRailBase, previousExpectedTime[K], expectedTime);
-            }
-        }
+
+        // foreach (var note in notesData.DLongNotes)
+        // {
+        //     float expectedTime = startTime + note.bar * barMillis;
+        //     if (note.type == "s")
+        //     {
+        //         previousExpectedTime[D] = expectedTime;
+        //         previousNoteBar[D] = note.bar;
+        //     }
+        //     else if (note.type == "e")
+        //     {
+        //         CreateLongNote(previousNoteBar[D], note.bar, "D", DRailBase, previousExpectedTime[D], expectedTime);
+        //     }
+        // }
+
         Debug.Log($"Notes:{totalCombo}");
     }
 
 
-    private void CreateNote(float bar, string railStr, Transform rail, string type)
+    private void CreateNote(float tick, int lane, int width, string type)
     {
+        float bar = tick / 1920f;//1920tickで1小節
         float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
-
+        float lanePos = 3 - (lane / 4f);
         //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
 
-        GameObject obj = Instantiate(NotePrefab, rail);//railを親、objを子として生成
+        GameObject obj = Instantiate(NotePrefab);//railを親、objを子として生成
         Note note = obj.GetComponent<Note>();
         note.scrollSpeed = scrollSpeed;
-        note.Init(bar, expectedTime);
+        note.Init(bar, expectedTime, lanePos);
         //Debug.Log($"{rail.name} worldX={rail.position.x}");
 
-        switch (railStr)
-        {
-            case "D":
+        //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
 
-                DNotes.Add(note);
-                break;
-            case "F":
-
-                FNotes.Add(note);
-                break;
-            case "J":
-
-                JNotes.Add(note);
-                break;
-            case "K":
-
-                KNotes.Add(note);
-                break;
-            default:
-                break;
-        }
-        Notes.Add(note);
+        notes.Add(note);
     }
 
     private void CreateLongNote(float startBar, float endBar, string railStr, Transform rail, float longStartTime, float longEndTime)
@@ -233,97 +163,44 @@ public class NoteManager : MonoBehaviour
 
         longNote.Init(startBar, endBar, longStartTime, longEndTime, railStr);
 
-        switch (railStr)
-        {
-            case "D":
-
-                DLongNotes.Add(longNote);
-                break;
-            case "F":
-
-                FLongNotes.Add(longNote);
-                break;
-            case "J":
-
-                JLongNotes.Add(longNote);
-                break;
-            case "K":
-
-                KLongNotes.Add(longNote);
-                break;
-            default:
-                break;
-        }
         LongNotes.Add(longNote);
     }
 
-    private void CreateIsoNote(float bar, string railStr, Transform rail, string type)
-    {
-        GameObject obj = Instantiate(IsoNotePrefab, rail);
-        Note note = obj.GetComponent<Note>();
-        note.scrollSpeed = scrollSpeed;
+    // private void CreateIsoNote(float bar, string railStr, Transform rail, string type)
+    // {
+    //     GameObject obj = Instantiate(IsoNotePrefab, rail);
+    //     Note note = obj.GetComponent<Note>();
+    //     note.scrollSpeed = scrollSpeed;
 
-        float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
+    //     float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
 
-        note.Init(bar, expectedTime);
-        //Debug.Log($"{rail.name} worldX={rail.position.x}");
+    //     note.Init(bar, expectedTime);
+    //     //Debug.Log($"{rail.name} worldX={rail.position.x}");
 
 
-        switch (railStr)
-        {
-            case "S":
-                SNotes.Add(note);
-                break;
-            case "L":
-                LNotes.Add(note);
-                break;
-            default:
-                break;
-        }
-        Notes.Add(note);
-    }
+    //     switch (railStr)
+    //     {
+    //         case "S":
+    //             SNotes.Add(note);
+    //             break;
+    //         case "L":
+    //             LNotes.Add(note);
+    //             break;
+    //         default:
+    //             break;
+    //     }
+    //     Notes.Add(note);
+    // }
     void Update()
     {
         float currentTime = MusicManager.instance.CurrentPlayTime;
         float presentBar = (currentTime - startTime) / barMillis;//startTimeを入れているのはスタート演出での帳尻合わせ
 
-        foreach (var note in new List<Note>(SNotes))
+        foreach (var note in new List<Note>(notes))
         {
             if (note != null) note.UpdatePosition(presentBar);
         }
-        foreach (var note in new List<Note>(DNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<Note>(FNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<Note>(JNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<Note>(KNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<Note>(LNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<LongNote>(DLongNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<LongNote>(FLongNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<LongNote>(JLongNotes))
-        {
-            if (note != null) note.UpdatePosition(presentBar);
-        }
-        foreach (var note in new List<LongNote>(KLongNotes))
+        foreach (var note in new List<LongNote>(LongNotes))
         {
             if (note != null) note.UpdatePosition(presentBar);
         }
@@ -331,49 +208,16 @@ public class NoteManager : MonoBehaviour
 
     public void RemoveNote(Note note, string lane)
     {
-        switch (lane)
-        {
-            case "s":
-                SNotes.Remove(note);
-                break;
-            case "d":
-                DNotes.Remove(note);
-                break;
-            case "f":
-                FNotes.Remove(note);
-                break;
-            case "j":
-                JNotes.Remove(note);
-                break;
-            case "k":
-                KNotes.Remove(note);
-                break;
-            case "l":
-                LNotes.Remove(note);
-                break;
-            default:
-                break;
-        }
+        notes.Remove(note);
+        // switch (lane)
+        // {
+        // ここもまとめれるならswitch文でまとめたい
+        // }
     }
 
     public void RemoveLongNote(LongNote longNote, string lane)
     {
-        switch (lane)
-        {
-            case "d":
-                DLongNotes.Remove(longNote);
-                break;
-            case "f":
-                FLongNotes.Remove(longNote);
-                break;
-            case "j":
-                JLongNotes.Remove(longNote);
-                break;
-            case "k":
-                KLongNotes.Remove(longNote);
-                break;
-            default:
-                break;
-        }
+        LongNotes.Remove(longNote);
     }
+
 }

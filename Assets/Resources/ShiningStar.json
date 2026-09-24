@@ -5,6 +5,7 @@
         {"bar":4.5, "type": "tap"}
     ],
     "DNotes":[
+        {"bar":0, "type": "tap"},
         {"bar":1, "type": "tap"},
         {"bar":1.25, "type": "tap"}
     ],

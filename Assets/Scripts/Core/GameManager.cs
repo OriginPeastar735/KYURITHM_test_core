@@ -38,7 +38,7 @@ public class GameManager : MonoBehaviour
         {
             PlayResult[i] = 0;
         }
-        NoteManager.instance.LoadJson("ShiningStar");
+        NoteManager.instance.LoadJson("tap_hold_slide");
         CurrentScene = GameScene.MusicSelect;
         totalCombo = NoteManager.instance.totalCombo;
     }

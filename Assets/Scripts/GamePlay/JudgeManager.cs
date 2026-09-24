@@ -278,14 +278,14 @@ public class JudgeManager : MonoBehaviour
 
         }
     }
-    void Update()
-    {
-        currentPlayTime = MusicManager.instance.CurrentPlayTime;
-        JudgeRail("d", NoteManager.instance.DNotes, NoteManager.instance.DLongNotes, DRailBase);
-        JudgeRail("f", NoteManager.instance.FNotes, NoteManager.instance.FLongNotes, FRailBase);
-        JudgeRail("j", NoteManager.instance.JNotes, NoteManager.instance.JLongNotes, JRailBase);
-        JudgeRail("k", NoteManager.instance.KNotes, NoteManager.instance.KLongNotes, KRailBase);
-        SLJudgeRail("s", NoteManager.instance.SNotes, DRailBase);
-        SLJudgeRail("l", NoteManager.instance.LNotes, KRailBase);
-    }
+    // void Update()
+    // {
+    //     currentPlayTime = MusicManager.instance.CurrentPlayTime;
+    //     JudgeRail("d", NoteManager.instance.DNotes, NoteManager.instance.DLongNotes, DRailBase);
+    //     JudgeRail("f", NoteManager.instance.FNotes, NoteManager.instance.FLongNotes, FRailBase);
+    //     JudgeRail("j", NoteManager.instance.JNotes, NoteManager.instance.JLongNotes, JRailBase);
+    //     JudgeRail("k", NoteManager.instance.KNotes, NoteManager.instance.KLongNotes, KRailBase);
+    //     SLJudgeRail("s", NoteManager.instance.SNotes, DRailBase);
+    //     SLJudgeRail("l", NoteManager.instance.LNotes, KRailBase);
+    // }
 }
