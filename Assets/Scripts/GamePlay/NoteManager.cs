@@ -11,6 +11,7 @@ public class NoteManager : MonoBehaviour
 {
     public static NoteManager instance;
     public GameObject NotePrefab;//Unity上でNoteプレハブを設定
+    public GameObject HoldPrefab;//Unity上で黄色のholdプレハブを作成し割り当て
     public GameObject IsoNotePrefab;
     public GameObject LongNotePrefab;
 
@@ -59,6 +60,7 @@ public class NoteManager : MonoBehaviour
     }
 
     public List<Note> notes = new List<Note>();
+    public List<Hold> holds = new List<Hold>();
     public List<LongNote> LongNotes = new List<LongNote>();
     // public List<Note> SNotes = new List<Note>();
     // public List<Note> DNotes = new List<Note>();
@@ -117,6 +119,10 @@ public class NoteManager : MonoBehaviour
         {
             if(note.type == "tap")
             CreateNote(note.tick, note.lane, note.width, note.type);
+            if(note.type == "hold")
+            CreateHoldNote(note.tick, note.lane, note.width, note.type);
+            if(note.type == "slide")
+            CreateSlideNote(note.sections);
         }
 
         // foreach (var note in notesData.DLongNotes)
@@ -154,6 +160,30 @@ public class NoteManager : MonoBehaviour
 
         notes.Add(note);
     }
+
+    private void CreateHoldNote(float tick, int lane, int width, string type)
+    {
+        float bar = tick / 1920f;//1920tickで1小節
+        float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
+        float lanePos = 3 - (lane / 4f);
+        //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
+
+        GameObject obj = Instantiate(HoldPrefab);//railを親、objを子として生成
+        Hold hold = obj.GetComponent<Hold>();
+        hold.scrollSpeed = scrollSpeed;
+        hold.Init(bar, expectedTime, lanePos);
+        //Debug.Log($"{rail.name} worldX={rail.position.x}");
+
+        //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
+
+        holds.Add(hold);
+    }
+
+    private void CreateSlideNote(var sections)
+    {
+        
+    }
+
 
     private void CreateLongNote(float startBar, float endBar, string railStr, Transform rail, float longStartTime, float longEndTime)
     {
