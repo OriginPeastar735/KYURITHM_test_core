@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Note : MonoBehaviour
+public class Hold : MonoBehaviour
 {
     public float noteBar;//ノーツの小節位置
     public float scrollSpeed = 1000f;//スクロール定数
@@ -34,7 +34,7 @@ public class Note : MonoBehaviour
 
     public void Delete(string lane)
     {
-        NoteManager.instance.RemoveNote(this, lane);//自身をListから削除
+        NoteManager.instance.RemoveHold(this, lane);//自身をListから削除
         Destroy(gameObject);
     }
 }

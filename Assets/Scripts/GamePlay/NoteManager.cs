@@ -117,12 +117,12 @@ public class NoteManager : MonoBehaviour
 
         foreach (var note in notesData.notes)
         {
-            if(note.type == "tap")
-            CreateNote(note.tick, note.lane, note.width, note.type);
-            if(note.type == "hold")
-            CreateHoldNote(note.tick, note.lane, note.width, note.type);
-            if(note.type == "slide")
-            CreateSlideNote(note.sections);
+            if (note.type == "tap")
+                CreateNote(note.tick, note.lane, note.width, note.type);
+            if (note.type == "hold")
+                CreateHoldNote(note.tick, note.lane, note.width, note.type);
+            if (note.type == "slide") { }
+            // CreateSlideNote(note.sections);
         }
 
         // foreach (var note in notesData.DLongNotes)
@@ -179,9 +179,9 @@ public class NoteManager : MonoBehaviour
         holds.Add(hold);
     }
 
-    private void CreateSlideNote(var sections)
+    private void CreateSlideNote()
     {
-        
+
     }
 
 
@@ -224,15 +224,24 @@ public class NoteManager : MonoBehaviour
     void Update()
     {
         float currentTime = MusicManager.instance.CurrentPlayTime;
-        float presentBar = (currentTime - startTime) / barMillis;//startTimeを入れているのはスタート演出での帳尻合わせ
+        float presentBar = (currentTime - startTime) / barMillis;
 
         foreach (var note in new List<Note>(notes))
         {
-            if (note != null) note.UpdatePosition(presentBar);
+            if (note != null)
+                note.UpdatePosition(presentBar);
         }
-        foreach (var note in new List<LongNote>(LongNotes))
+
+        foreach (var hold in new List<Hold>(holds))
         {
-            if (note != null) note.UpdatePosition(presentBar);
+            if (hold != null)
+                hold.UpdatePosition(presentBar);
+        }
+
+        foreach (var longNote in new List<LongNote>(LongNotes))
+        {
+            if (longNote != null)
+                longNote.UpdatePosition(presentBar);
         }
     }
 
@@ -245,9 +254,16 @@ public class NoteManager : MonoBehaviour
         // }
     }
 
+    public void RemoveHold(Hold hold, string lane)
+    {
+        holds.Remove(hold);
+    }
+
     public void RemoveLongNote(LongNote longNote, string lane)
     {
         LongNotes.Remove(longNote);
     }
+
+
 
 }
