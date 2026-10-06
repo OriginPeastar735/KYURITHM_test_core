@@ -31,6 +31,7 @@ public class NoteManager : MonoBehaviour
 
     private float barMillis;
     public int destroyedNotesCount = 0;
+    public float barPertick = 1920f;
 
     //ノーツ情報
     [System.Serializable]
@@ -41,6 +42,7 @@ public class NoteManager : MonoBehaviour
         public int lane;
         public int width;
         public int tick;
+        public List<SlideSection> sections; //slideフォーマット対応のためのlist
     }
 
     //slideのjsonフォーマットを認識するためのクラス
@@ -164,11 +166,11 @@ public class NoteManager : MonoBehaviour
     }
 
 
-    private void CreateNote(float tick, int lane, int width, string type)
+    private void CreateNote(int tick, int lane, int width, string type)
     {
-        float bar = tick / 1920f;//1920tickで1小節
-        float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
-        float lanePos = 3 - (lane / 4f);
+        float bar = CulcBar(tick);//1920tickで1小節
+        float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
+        float lanePos = LanePos(lane);
         //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
 
         GameObject obj = Instantiate(NotePrefab);//railを親、objを子として生成
@@ -182,11 +184,11 @@ public class NoteManager : MonoBehaviour
         notes.Add(note);
     }
 
-    private void CreateHoldNote(float tick, int lane, int width, string type)
+    private void CreateHoldNote(int tick, int lane, int width, string type)
     {
-        float bar = tick / 1920f;//1920tickで1小節
-        float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
-        float lanePos = 3 - (lane / 4f);
+        float bar = CulcBar(tick);//1920tickで1小節
+        float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
+        float lanePos = LanePos(lane);
         //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
 
         GameObject obj = Instantiate(HoldPrefab);//railを親、objを子として生成
@@ -202,12 +204,25 @@ public class NoteManager : MonoBehaviour
 
     private void CreateSlide(List<SlideSection> sections)
     {
-        foreach (SlideSection section in sections)
-        {
+        foreach(var section in sections){
+        float startBar = CulcBar(section.from.tick);
+        float endBar = CulcBar(section.to.tick);
+        float startExpectedTime = ExpectedTime(startBar);
+        float endExpectedTime = ExpectedTime(endBar);
+        float startLanePos = LanePos(section.from.lane);
+        float endLanePos = LanePos(section.to.lane);
+        
 
+        GameObject obj = Instantiate(LongNotePrefab);
+        LongNote longNote = obj.GetComponent<LongNote>();
+        longNote.scrollSpeed = scrollSpeed;
+
+        longNote.Init(startBar, endBar, startExpectedTime, endExpectedTime, startLanePos, endLanePos);
+
+        LongNotes.Add(longNote);
         }
-    }
 
+    }
 
     private void CreateLongNote(float startBar, float endBar, string railStr, Transform rail, float longStartTime, float longEndTime)
     {
@@ -215,10 +230,31 @@ public class NoteManager : MonoBehaviour
         LongNote longNote = obj.GetComponent<LongNote>();
         longNote.scrollSpeed = scrollSpeed;
 
-        longNote.Init(startBar, endBar, longStartTime, longEndTime, railStr);
+        longNote.Init(startBar, endBar, longStartTime, longEndTime, longStartTime, longEndTime);
 
         LongNotes.Add(longNote);
     }
+
+    // ノーツの理想タイミングを計算する関数
+    private float ExpectedTime(float bar)
+    {
+        return startTime + bar * barMillis;
+    }
+
+    // ノーツの小節位置を計算する関数
+    private float CulcBar(int tick)
+    {
+        return tick / barPertick;
+    }
+
+    // ノーツのレーン位置を計算する関数（テスト用なので後ほど変更あり）
+    private float LanePos(int lane)
+    {
+        return 3 - (lane / 4f);
+    }
+
+
+
 
     // private void CreateIsoNote(float bar, string railStr, Transform rail, string type)
     // {

@@ -1,0 +1,133 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 4,
+    "totalNotes": 12
+  },
+  "notes": [
+    {
+      "id": 1791287057944.6567,
+      "type": "tap",
+      "lane": 0,
+      "width": 4,
+      "tick": 0
+    },
+    {
+      "id": 1791287086245.9668,
+      "type": "hold",
+      "lane": 8,
+      "width": 2,
+      "tick": 0
+    },
+    {
+      "id": 1791287104780.8687,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 12,
+            "width": 4,
+            "tick": 0
+          },
+          "to": {
+            "lane": 12,
+            "width": 4,
+            "tick": 1920
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791287113916.8315,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 16,
+            "width": 4,
+            "tick": 0
+          },
+          "to": {
+            "lane": 20,
+            "width": 4,
+            "tick": 1920
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791287173056.8936,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 24,
+            "width": 4,
+            "tick": 0
+          },
+          "to": {
+            "lane": 26,
+            "width": 1,
+            "tick": 1920
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791287064314.239,
+      "type": "tap",
+      "lane": 2,
+      "width": 6,
+      "tick": 480
+    },
+    {
+      "id": 1791287093638.9492,
+      "type": "hold",
+      "lane": 8,
+      "width": 2,
+      "tick": 480
+    },
+    {
+      "id": 1791287070448.379,
+      "type": "tap",
+      "lane": 4,
+      "width": 2,
+      "tick": 960
+    },
+    {
+      "id": 1791287095739.09,
+      "type": "hold",
+      "lane": 8,
+      "width": 2,
+      "tick": 960
+    },
+    {
+      "id": 1791287077395.5964,
+      "type": "tap",
+      "lane": 6,
+      "width": 2,
+      "tick": 1440
+    },
+    {
+      "id": 1791287097757.506,
+      "type": "hold",
+      "lane": 8,
+      "width": 2,
+      "tick": 1440
+    },
+    {
+      "id": 1791287100705.4902,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 1920
+    }
+  ]
+}

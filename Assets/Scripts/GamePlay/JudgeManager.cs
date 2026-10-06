@@ -81,7 +81,7 @@ public class JudgeManager : MonoBehaviour
             foreach (var ln in longNotesCopy)
             {
                 if (ln.state != LongNoteState.None) continue;
-                float judgeTiming = (currentPlayTime - ln.previousExpectedTime) * 1000f;
+                float judgeTiming = (currentPlayTime - ln.startExpectedTime) * 1000f;
                 if (Mathf.Abs(judgeTiming) <= 22.25)
                 {
                     EffectManager.instance.PerfectEffect(railBase);
@@ -116,7 +116,7 @@ public class JudgeManager : MonoBehaviour
                 if (ln.state == LongNoteState.Holding)
                 {
                     //押し続けている間のコンボ加算などをここで行う
-                    float endTiming = (currentPlayTime - ln.expectedTime) * 1000f;
+                    float endTiming = (currentPlayTime - ln.endExpectedTime) * 1000f;
                     if (endTiming >= 0)
                     {
                         EffectManager.instance.PerfectEffect(railBase);
@@ -135,7 +135,7 @@ public class JudgeManager : MonoBehaviour
             {
                 if (ln.state == LongNoteState.Holding)//ホールドされてるロングノーツだけを判定するよ
                 {
-                    float judgeTiming = (currentPlayTime - ln.expectedTime) * 1000f;
+                    float judgeTiming = (currentPlayTime - ln.endExpectedTime) * 1000f;
                     Debug.Log($"release: {judgeTiming}ms");
                     if (judgeTiming < -70)
                     {

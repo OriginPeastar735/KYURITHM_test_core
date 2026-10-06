@@ -13,10 +13,12 @@ public class LongNote : MonoBehaviour
     public LongNoteState state = LongNoteState.None;//このロングノーツの現在の状態を示す
     public float startBar;//ノーツの小節位置
     public float scrollSpeed = 1000f;//スクロール定数
-    public float previousExpectedTime;
-    public float expectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
+    public float startExpectedTime;
+    public float endExpectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
     private float presentBar;//楽曲の現在の小節位置
     private float endBar;//ロングノーツ終点
+    public float startLanePos;
+    public float endLanePos; 
     public bool judged = false;
     public string railStr;
     public float endZ;
@@ -28,15 +30,17 @@ public class LongNote : MonoBehaviour
     public Transform EndNote;
     public Transform HoldNote;
 
-    public void Init(float startBar, float endBar, float previousExpectedTime, float expectedTime, string railStr)
+    public void Init(float startBar, float endBar, float startExpectedTime, float endExpectedTime, float startLanePos, float endLanePos)
     {
         this.startBar = startBar;
         this.endBar = endBar;
-        this.expectedTime = expectedTime;
-        this.previousExpectedTime = previousExpectedTime;
-        this.railStr = railStr;
+        this.endExpectedTime = endExpectedTime;
+        this.startExpectedTime = startExpectedTime;
+        this.startLanePos = startLanePos;
+        this.endLanePos = endLanePos;
+        // this.railStr = railStr;
 
-        transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
+        transform.localPosition = new Vector3(startLanePos, 0, 0);
     
     }
 
