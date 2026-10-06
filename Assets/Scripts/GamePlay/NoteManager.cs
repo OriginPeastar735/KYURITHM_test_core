@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using Newtonsoft.Json;
+using System;
 
 public class NoteManager : MonoBehaviour
 {
@@ -37,6 +38,25 @@ public class NoteManager : MonoBehaviour
     {
         public float bar;
         public string type;
+        public int lane;
+        public int width;
+        public int tick;
+    }
+
+    //slideのjsonフォーマットを認識するためのクラス
+    [Serializable]
+    public class SlideSection
+    {
+        public SlidePointer from;
+        public SlidePointer to;
+        public string curve;
+    }
+
+    //from,to内のフォーマットも認識できるようにする。
+    //これでslideの全ての要素を取り出すことが可能になる
+    [Serializable]
+    public class SlidePointer
+    {
         public int lane;
         public int width;
         public int tick;
@@ -121,7 +141,8 @@ public class NoteManager : MonoBehaviour
                 CreateNote(note.tick, note.lane, note.width, note.type);
             if (note.type == "hold")
                 CreateHoldNote(note.tick, note.lane, note.width, note.type);
-            if (note.type == "slide") { }
+            if (note.type == "slide")
+                CreateSlide(note.sections);
             // CreateSlideNote(note.sections);
         }
 
@@ -179,9 +200,12 @@ public class NoteManager : MonoBehaviour
         holds.Add(hold);
     }
 
-    private void CreateSlideNote()
+    private void CreateSlide(List<SlideSection> sections)
     {
+        foreach (SlideSection section in sections)
+        {
 
+        }
     }
 
 
