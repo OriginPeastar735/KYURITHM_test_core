@@ -64,10 +64,20 @@ public class NoteManager : MonoBehaviour
         public int tick;
     }
 
+    //KYURITHMフォーマットの"meta"部分
+    [Serializable]
+    public class MetaData
+    {
+        public string title;
+        public float bpm;
+        public float offset;
+    }
+
     [System.Serializable]
     public class NotesData
     {
-        public float bpm;
+        public MetaData meta;
+        public float bpm;//旧フォーマット（トップレベルにbpm）用
         public List<NoteData> notes;
         // public List<NoteData> SNotes;
         // public List<NoteData> DNotes;
@@ -115,8 +125,7 @@ public class NoteManager : MonoBehaviour
     void Start()
     {
         startTime = 0f;//後で変更
-        bpm = 158;
-        barMillis = (60f / bpm) * 4f;//1小節あたりの時間(ms)
+        //bpmはLoadJsonで譜面から設定する（Startの実行順によっては上書きしてしまうため、ここでは設定しない）
     }
 
     public void LoadJson(string fileName)
@@ -128,8 +137,14 @@ public class NoteManager : MonoBehaviour
 
         totalCombo += notesData.notes.Count;
 
-        bpm = notesData.bpm;
-        barMillis = (60f / bpm) * 4f;
+        //KYURITHMフォーマットはmeta内、旧フォーマットはトップレベルのbpmを使う
+        bpm = notesData.meta != null ? notesData.meta.bpm : notesData.bpm;
+        if (bpm <= 0)
+        {
+            Debug.LogError($"{fileName}: bpmが読み込めませんでした");
+            bpm = 120f;
+        }
+        barMillis = (60f / bpm) * 4f;//1小節あたりの時間(秒)
 
         //holdノートに使えるかも
         // foreach (var note in notesData.SNotes)
@@ -247,10 +262,10 @@ public class NoteManager : MonoBehaviour
         return tick / barPertick;
     }
 
-    // ノーツのレーン位置を計算する関数（テスト用なので後ほど変更あり）
+    // ノーツのレーン位置を計算する関数（計算本体はLaneLayoutに集約）
     private float LanePos(int lane)
     {
-        return 3 - (lane / 4f);
+        return LaneLayout.LanePos(lane);
     }
 
 
