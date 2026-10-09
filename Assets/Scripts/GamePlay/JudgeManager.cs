@@ -3,6 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum JudgeResult
+{
+    Perfect, Great, Good, Miss
+}
+
+//InputManagerのレーン入力とノーツのlane/widthを照らし合わせて判定する
 public class JudgeManager : MonoBehaviour
 {
     public static JudgeManager instance;
@@ -11,19 +17,25 @@ public class JudgeManager : MonoBehaviour
     public static event Action Great;
     public static event Action Good;
     public static event Action Miss;
+    //以前の音ゲーの演出用（RailBaseManager/MusicManagerが購読しているため残している）
     public static event Action DRailMove;
     public static event Action KRailMove;
     public static event Action PlayIsoSound;
 
-    public Transform DRailBase;
-    public Transform FRailBase;
-    public Transform JRailBase;
-    public Transform KRailBase;
+    [Header("判定幅(ms)")]
+    public float perfectMs = 22.25f;
+    public float greatMs = 40f;
+    public float goodMs = 70f;
 
+    [Header("slide")]
+    public float slideReleaseGrace = 0.1f;//判定点の前後で指が離れていても許容する秒数（キーの持ち替え対策）
+    public int slideLaneMargin = 0;//slideの範囲を左右に何レーン広げて判定するか（判定を甘くしたい場合に使う）
 
     private float currentPlayTime;
-    private Note[] Notes;
-    private int destroyedNotesCount;
+    private float GoodWindow => goodMs / 1000f;
+
+    //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
+    private readonly bool[] consumed = new bool[InputManager.LaneCount];
 
     void Awake()
     {
@@ -32,260 +44,250 @@ public class JudgeManager : MonoBehaviour
             instance = this;
         }
     }
-    // Start is called before the first frame update
-    void Start()
+
+    void Update()
     {
+        if (MusicManager.instance == null || NoteManager.instance == null || InputManager.instance == null) return;
+
+        currentPlayTime = MusicManager.instance.CurrentPlayTime;
+        Array.Clear(consumed, 0, consumed.Length);
+
+        JudgeTaps();
+        JudgeHolds();
+        JudgeSlides();
+        CheckMiss();
     }
 
-    void JudgeRail(string key, List<Note> notes, List<LongNote> longNotes, Transform railBase)
+    // ===== tap と slide始点 =====
+    //押された入力に対して、判定幅内で一番早いノーツから順に判定する
+    void JudgeTaps()
     {
-        CheckMiss(key, notes);
-        CheckMissLongNote(key, longNotes);
-        if (Input.GetKeyDown(key))
+        while (true)
         {
-            //インスタンスではなくリストのコピーを用いることで参照エラー回避。
-            //現在の再生時間から探索範囲を絞れば数万ノーツでも軽い処理が可能になる
-            var notesCopy = new List<Note>(notes);
-            foreach (var note in notesCopy)
-            {
-                if (note == null) continue;
-                float judgeTiming = (currentPlayTime - note.expectedTime) * 1000f;
-                if (Mathf.Abs(judgeTiming) <= 22.25)
-                {
-                    EffectManager.instance.PerfectEffect(railBase);
-                    Debug.Log($"parfect: {judgeTiming}ms");
-                    note.Delete(key);
-                    Perfect?.Invoke();
-                    break; //多重判定回避
-                }
-                else if (Mathf.Abs(judgeTiming) <= 40)
-                {
-                    EffectManager.instance.GreatEffect(railBase);
-                    Debug.Log($"great: {judgeTiming}ms");
-                    note.Delete(key);
-                    Great?.Invoke();
-                    break; //多重判定回避
-                }
-                else if (Mathf.Abs(judgeTiming) <= 70)
-                {
-                    EffectManager.instance.GoodEffect(railBase);
-                    Debug.Log($"good: {judgeTiming}ms");
-                    note.Delete(key);
-                    Good?.Invoke();
-                    break; //多重判定回避
-                }
+            Note bestNote = null;
+            LongNote bestSlide = null;
+            float bestTime = float.MaxValue;
 
+            foreach (var note in NoteManager.instance.notes)
+            {
+                if (note == null || note.expectedTime >= bestTime) continue;
+                if (Mathf.Abs(currentPlayTime - note.expectedTime) > GoodWindow) continue;
+                if (!HasFreeDown(note.lane, note.width)) continue;
+                bestNote = note;
+                bestSlide = null;
+                bestTime = note.expectedTime;
             }
 
-            var longNotesCopy = new List<LongNote>(longNotes);
-            foreach (var ln in longNotesCopy)
+            foreach (var ln in NoteManager.instance.LongNotes)
             {
-                if (ln.state != LongNoteState.None) continue;
-                float judgeTiming = (currentPlayTime - ln.startExpectedTime) * 1000f;
-                if (Mathf.Abs(judgeTiming) <= 22.25)
-                {
-                    EffectManager.instance.PerfectEffect(railBase);
-                    EffectManager.instance.HoldEffect(railBase, key);
-                    ln.OnStartPress();//別スクリプトでもちゃんと認識してくれる
-                    Perfect?.Invoke();
-                    break;
-                }
-                else if (Mathf.Abs(judgeTiming) <= 40)
-                {
-                    EffectManager.instance.GreatEffect(railBase);
-                    EffectManager.instance.HoldEffect(railBase, key);
-                    ln.OnStartPress();//別スクリプトでもちゃんと認識してくれる
-                    Great?.Invoke();
-                    break;
-                }
-                else if (Mathf.Abs(judgeTiming) <= 70)
-                {
-                    EffectManager.instance.GoodEffect(railBase);
-                    EffectManager.instance.HoldEffect(railBase, key);
-                    ln.OnStartPress();//別スクリプトでもちゃんと認識してくれる
-                    Good?.Invoke();
-                    break;
-                }
-            }
-        }
-        if (Input.GetKey(key))
-        {
-            var lnCopy = new List<LongNote>(longNotes);
-            foreach (var ln in lnCopy)
-            {
-                if (ln.state == LongNoteState.Holding)
-                {
-                    //押し続けている間のコンボ加算などをここで行う
-                    float endTiming = (currentPlayTime - ln.endExpectedTime) * 1000f;
-                    if (endTiming >= 0)
-                    {
-                        EffectManager.instance.PerfectEffect(railBase);
-                        DestroyHoldEffect(key);
-                        ln.Finish(key);
-                        Perfect?.Invoke();
-                    }
-                }
+                if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
+                if (ln.startExpectedTime >= bestTime) continue;
+                if (Mathf.Abs(currentPlayTime - ln.startExpectedTime) > GoodWindow) continue;
+                if (!HasFreeDown(ln.startLane, ln.startWidth)) continue;
+                bestNote = null;
+                bestSlide = ln;
+                bestTime = ln.startExpectedTime;
             }
 
-        }
-        if (Input.GetKeyUp(key))
-        {
-            var lnCopy = new List<LongNote>(longNotes);
-            foreach (var ln in lnCopy)
+            if (bestNote != null)
             {
-                if (ln.state == LongNoteState.Holding)//ホールドされてるロングノーツだけを判定するよ
-                {
-                    float judgeTiming = (currentPlayTime - ln.endExpectedTime) * 1000f;
-                    Debug.Log($"release: {judgeTiming}ms");
-                    if (judgeTiming < -70)
-                    {
-                        DestroyHoldEffect(key);
-                        ln.OnReleaseEarly();
-                        Miss?.Invoke();
-                    }
-                    else if (judgeTiming <= -40 && judgeTiming <= -70)
-                    {
-                        EffectManager.instance.GoodEffect(railBase);
-                        DestroyHoldEffect(key);
-                        ln.Finish(key);
-                        Good?.Invoke();
-                    }
-                    else if (judgeTiming <= -22.25 && judgeTiming <= -40)
-                    {
-                        EffectManager.instance.GreatEffect(railBase);
-                        DestroyHoldEffect(key);
-                        ln.Finish(key);
-                        Great?.Invoke();
-                    }
-                    else if (judgeTiming <= 0 && judgeTiming <= -22.25)
-                    {
-                        EffectManager.instance.PerfectEffect(railBase);
-                        DestroyHoldEffect(key);
-                        ln.Finish(ln.railStr);
-                        Perfect?.Invoke();
-                    }
-                }
+                float diff = currentPlayTime - bestNote.expectedTime;
+                Consume(bestNote.lane, bestNote.width);
+                ShowResult(GradeByTiming(diff), bestNote.lanePos, diff);
+                bestNote.Delete();
+            }
+            else if (bestSlide != null)
+            {
+                float diff = currentPlayTime - bestSlide.startExpectedTime;
+                float x = LaneLayout.LanePos(bestSlide.startLane + bestSlide.startWidth / 2f);
+                Consume(bestSlide.startLane, bestSlide.startWidth);
+                ShowResult(GradeByTiming(diff), x, diff);
+                bestSlide.Activate();
+            }
+            else
+            {
+                break;//判定できるノーツがもうない
             }
         }
     }
 
-    void SLJudgeRail(string key, List<Note> notes, Transform railBase)
+    // ===== hold =====
+    //判定ラインを通過する時にノーツの範囲が押されていればPerfect
+    void JudgeHolds()
     {
-        CheckMiss(key, notes);
-        if (Input.GetKeyDown(key))
+        foreach (var hold in new List<Hold>(NoteManager.instance.holds))
         {
-            var notesCopy = new List<Note>(notes);
+            if (hold == null) continue;
+            float diff = currentPlayTime - hold.expectedTime;
+            if (diff < 0) continue;//まだ判定ラインに来ていない
 
-            foreach (var note in notesCopy)
+            if (InputManager.instance.AnyHeld(hold.lane, hold.width))
             {
-                if (note == null) continue;
-                float judgeTiming = (currentPlayTime - note.expectedTime) * 1000f;
-                if (Mathf.Abs(judgeTiming) <= 22.25)
-                {
-                    PlayIsoSound?.Invoke();
-                    EffectManager.instance.PerfectEffect(railBase);
-                    Debug.Log($"parfect: {judgeTiming}ms");
-                    note.Delete(key);
-                    Perfect?.Invoke();
-                    DestroyIsoNote(key);
-                    break; //多重判定回避
-                }
-                else if (Mathf.Abs(judgeTiming) <= 40)
-                {
-                    PlayIsoSound?.Invoke();
-                    EffectManager.instance.GreatEffect(railBase);
-                    Debug.Log($"great: {judgeTiming}ms");
-                    note.Delete(key);
-                    Great?.Invoke();
-                    DestroyIsoNote(key);
-                    break; //多重判定回避
-                }
-                else if (Mathf.Abs(judgeTiming) <= 70)
-                {
-                    PlayIsoSound?.Invoke();
-                    EffectManager.instance.GoodEffect(railBase);
-                    Debug.Log($"good: {judgeTiming}ms");
-                    note.Delete(key);
-                    Good?.Invoke();
-                    DestroyIsoNote(key);
-                    break; //多重判定回避
-                }
+                ShowResult(JudgeResult.Perfect, hold.lanePos, diff);
+                hold.Delete();
+            }
+            else if (diff > GoodWindow)
+            {
+                ShowResult(JudgeResult.Miss, hold.lanePos, diff);
+                hold.Delete();
             }
         }
     }
 
-    void CheckMiss(string key, List<Note> notes)
+    // ===== slide（判定点） =====
+    //チュウニズム方式：一定間隔の判定点ごとに「その時点でslideの範囲に触れているか」を判定する
+    //離したタイミングは判定せず、途中で離しても再び触れれば以降の判定点は取れる
+    void JudgeSlides()
     {
-        if(notes.Count == 0)return;
-        var note = notes[0];
-        if(note == null)return;
-
-        //z座標が一定値を超えたらミス
-        if(note.transform.position.z > 1.0f)
+        foreach (var ln in new List<LongNote>(NoteManager.instance.LongNotes))
         {
-            note.Delete(key);
-            Miss?.Invoke();
+            if (ln == null) continue;
+
+            if (ln.state == LongNoteState.None)
+            {
+                //2つ目以降のセクションは始点の時刻になったら判定を始める（始点の判定はない）
+                if (!ln.isFirstSection && currentPlayTime >= ln.startExpectedTime) ln.Activate();
+                else continue;
+            }
+
+            bool held = IsHoldingSlide(ln);
+            if (held) ln.lastHeldTime = currentPlayTime;
+            UpdateHoldEffect(ln, held);
+            JudgeCheckpoints(ln);
         }
     }
 
-    void CheckMissLongNote(string key, List<LongNote> longNotes)
+    void JudgeCheckpoints(LongNote ln)
     {
-        if(longNotes.Count == 0)return;
-        var ln = longNotes[0];
-        if(ln == null)return;
-
-        //z座標が一定値を超えたらミス
-        if(ln.startZ > 1.0f && ln.state == LongNoteState.None)
+        while (ln.nextCheckpoint < ln.checkpointTimes.Count)
         {
-            ln.Finish(key);
-            Miss?.Invoke();
+            float checkpoint = ln.checkpointTimes[ln.nextCheckpoint];
+            if (currentPlayTime < checkpoint) break;//まだ判定点に来ていない
+
+            float x = ln.GetCenterXAt(checkpoint);
+            if (checkpoint - ln.lastHeldTime <= slideReleaseGrace)
+            {
+                //判定点の直前(猶予内)から今までに触れていた
+                ShowResult(JudgeResult.Perfect, x, 0);
+            }
+            else if (currentPlayTime - checkpoint > slideReleaseGrace)
+            {
+                ShowResult(JudgeResult.Miss, x, currentPlayTime - checkpoint);
+            }
+            else
+            {
+                break;//猶予時間内に触れるのを待つ
+            }
+            ln.nextCheckpoint++;
+        }
+
+        if (ln.nextCheckpoint >= ln.checkpointTimes.Count) ln.Finish();
+    }
+
+    //触れている間だけエフェクトを出す（位置はLongNote.UpdatePositionで追従）
+    void UpdateHoldEffect(LongNote ln, bool held)
+    {
+        if (held && ln.holdEffect == null)
+        {
+            ln.holdEffect = EffectManager.instance.HoldEffect(ln.GetCenterXAt(currentPlayTime));
+        }
+        else if (!held && ln.holdEffect != null)
+        {
+            Destroy(ln.holdEffect);
+            ln.holdEffect = null;
         }
     }
 
-    void DestroyIsoNote(string key)
+    //判定ライン上のslideの範囲（の一部でも）が押されているか
+    bool IsHoldingSlide(LongNote ln)
     {
-        switch (key)
+        ln.GetLaneRangeAt(currentPlayTime, out float lane, out float width);
+        int from = Mathf.FloorToInt(lane) - slideLaneMargin;
+        int to = Mathf.CeilToInt(lane + width) + slideLaneMargin;
+        return InputManager.instance.AnyHeld(from, to - from);
+    }
+
+    // ===== 見逃し =====
+    void CheckMiss()
+    {
+        foreach (var note in new List<Note>(NoteManager.instance.notes))
         {
-            case "s":
-                DRailMove?.Invoke();
+            if (note == null) continue;
+            if (currentPlayTime - note.expectedTime > GoodWindow)
+            {
+                ShowResult(JudgeResult.Miss, note.lanePos, currentPlayTime - note.expectedTime);
+                note.Delete();
+            }
+        }
+
+        foreach (var ln in new List<LongNote>(NoteManager.instance.LongNotes))
+        {
+            if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
+            float diff = currentPlayTime - ln.startExpectedTime;
+            if (diff > GoodWindow)
+            {
+                //始点を逃してもslideは続き、以降の判定点は触れれば取れる
+                float x = LaneLayout.LanePos(ln.startLane + ln.startWidth / 2f);
+                ShowResult(JudgeResult.Miss, x, diff);
+                ln.Activate();
+            }
+        }
+    }
+
+    // ===== 共通処理 =====
+    JudgeResult GradeByTiming(float diffSec)
+    {
+        float ms = Mathf.Abs(diffSec * 1000f);
+        if (ms <= perfectMs) return JudgeResult.Perfect;
+        if (ms <= greatMs) return JudgeResult.Great;
+        if (ms <= goodMs) return JudgeResult.Good;
+        return JudgeResult.Miss;
+    }
+
+    //判定結果に応じてエフェクトとイベントを発行する
+    void ShowResult(JudgeResult result, float x, float diffSec)
+    {
+        Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
+        switch (result)
+        {
+            case JudgeResult.Perfect:
+                EffectManager.instance.PerfectEffect(x);
+                Perfect?.Invoke();
                 break;
-            case "l":
-                KRailMove?.Invoke();
+            case JudgeResult.Great:
+                EffectManager.instance.GreatEffect(x);
+                Great?.Invoke();
                 break;
-            default:
+            case JudgeResult.Good:
+                EffectManager.instance.GoodEffect(x);
+                Good?.Invoke();
+                break;
+            case JudgeResult.Miss:
+                Miss?.Invoke();
                 break;
         }
     }
 
-    void DestroyHoldEffect(string key)
+    //範囲内に、まだ使われていない「押した瞬間」の入力があるか
+    bool HasFreeDown(int lane, int width)
     {
-        switch (key)
+        int start = Mathf.Max(0, lane);
+        int end = Mathf.Min(InputManager.LaneCount, lane + width);
+        for (int i = start; i < end; i++)
         {
-            case "d":
-                Destroy(EffectManager.DHoldEffect);
-                break;
-            case "f":
-                Destroy(EffectManager.FHoldEffect);
-                break;
-            case "j":
-                Destroy(EffectManager.JHoldEffect);
-                break;
-            case "k":
-                Destroy(EffectManager.KHoldEffect);
-                break;
-            default:
-                break;
+            if (InputManager.instance.laneDown[i] && !consumed[i]) return true;
+        }
+        return false;
+    }
 
+    //範囲内の「押した瞬間」の入力を使用済みにする
+    void Consume(int lane, int width)
+    {
+        int start = Mathf.Max(0, lane);
+        int end = Mathf.Min(InputManager.LaneCount, lane + width);
+        for (int i = start; i < end; i++)
+        {
+            if (InputManager.instance.laneDown[i]) consumed[i] = true;
         }
     }
-    // void Update()
-    // {
-    //     currentPlayTime = MusicManager.instance.CurrentPlayTime;
-    //     JudgeRail("d", NoteManager.instance.DNotes, NoteManager.instance.DLongNotes, DRailBase);
-    //     JudgeRail("f", NoteManager.instance.FNotes, NoteManager.instance.FLongNotes, FRailBase);
-    //     JudgeRail("j", NoteManager.instance.JNotes, NoteManager.instance.JLongNotes, JRailBase);
-    //     JudgeRail("k", NoteManager.instance.KNotes, NoteManager.instance.KLongNotes, KRailBase);
-    //     SLJudgeRail("s", NoteManager.instance.SNotes, DRailBase);
-    //     SLJudgeRail("l", NoteManager.instance.LNotes, KRailBase);
-    // }
 }

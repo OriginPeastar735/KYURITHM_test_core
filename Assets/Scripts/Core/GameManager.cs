@@ -38,7 +38,7 @@ public class GameManager : MonoBehaviour
         {
             PlayResult[i] = 0;
         }
-        NoteManager.instance.LoadJson("tap_hold_slide2");
+        NoteManager.instance.LoadJson("test2");
         CurrentScene = GameScene.MusicSelect;
         totalCombo = NoteManager.instance.totalCombo;
     }

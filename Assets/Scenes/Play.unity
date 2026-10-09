@@ -698,6 +698,7 @@ MonoBehaviour:
   scrollSpeed: 20
   destroyedNotesCount: 0
   barPertick: 1920
+  slideCheckpointTick: 240
   notes: []
   holds: []
   LongNotes: []
@@ -1468,10 +1469,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3c5bc10d843a5e4da862d6df06b9abe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  DRailBase: {fileID: 0}
-  FRailBase: {fileID: 366673962}
-  JRailBase: {fileID: 0}
-  KRailBase: {fileID: 0}
+  perfectMs: 22.25
+  greatMs: 40
+  goodMs: 70
+  slideReleaseGrace: 0.1
+  slideLaneMargin: 0
 --- !u!1 &1403596278
 GameObject:
   m_ObjectHideFlags: 0
@@ -1808,6 +1810,8 @@ MonoBehaviour:
   greatEffectPrefab: {fileID: 3630950076977652491, guid: d0ee11761a4137645a9a1b0bd1ea7e53, type: 3}
   goodEffectPrefab: {fileID: 1114292188611296962, guid: 6b390d1f5879f3e47a3dbd64152ab32b, type: 3}
   holdEffectPrefab: {fileID: 9027514048236820045, guid: effb650189dc5714e9e9801b1cfb3991, type: 3}
+  effectY: 0.002
+  judgeLineZ: 0
 --- !u!4 &1677596626
 Transform:
   m_ObjectHideFlags: 0
@@ -1956,7 +1960,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3738721513888559900, guid: 65b3660e8846a4b4682fd3a3e52101a9, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 3.75
+      value: 15.49
       objectReference: {fileID: 0}
     - target: {fileID: 3738721513888559900, guid: 65b3660e8846a4b4682fd3a3e52101a9, type: 3}
       propertyPath: m_LocalPosition.y
@@ -1997,6 +2001,10 @@ PrefabInstance:
     - target: {fileID: 3819541104689939537, guid: 65b3660e8846a4b4682fd3a3e52101a9, type: 3}
       propertyPath: m_Name
       value: RailBase
+      objectReference: {fileID: 0}
+    - target: {fileID: 4106385763275853239, guid: 65b3660e8846a4b4682fd3a3e52101a9, type: 3}
+      propertyPath: m_Enabled
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5477568799120111846, guid: 65b3660e8846a4b4682fd3a3e52101a9, type: 3}
       propertyPath: m_LocalScale.x

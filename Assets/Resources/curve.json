@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 4,
+    "totalNotes": 2
+  },
+  "notes": [
+    {
+      "id": 1791546274252.5745,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 8,
+            "width": 4,
+            "tick": 1920
+          },
+          "to": {
+            "lane": 12,
+            "width": 4,
+            "tick": 3840
+          },
+          "curve": "in_curve"
+        }
+      ]
+    },
+    {
+      "id": 1791546278800.0518,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 20,
+            "width": 4,
+            "tick": 1920
+          },
+          "to": {
+            "lane": 16,
+            "width": 4,
+            "tick": 3840
+          },
+          "curve": "out_curve"
+        }
+      ]
+    }
+  ]
+}

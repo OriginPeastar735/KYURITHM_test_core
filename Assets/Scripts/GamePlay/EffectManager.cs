@@ -11,10 +11,8 @@ public class EffectManager : MonoBehaviour
 
     public static EffectManager instance;
 
-    public static GameObject DHoldEffect;
-    public static GameObject FHoldEffect;
-    public static GameObject JHoldEffect;
-    public static GameObject KHoldEffect;
+    public float effectY = 0.002f;//エフェクトを出す高さ
+    public float judgeLineZ = 0f;//判定ラインのz座標
 
     void Awake()
     {
@@ -23,68 +21,32 @@ public class EffectManager : MonoBehaviour
             instance = this;
         }
     }
-    // Start is called before the first frame update
-    void Start()
+
+    //判定ライン上のx座標の位置
+    private Vector3 EffectPos(float x)
     {
+        return new Vector3(x, effectY, judgeLineZ);
     }
 
-    // Update is called once per frame
-    void Update()
+    public void PerfectEffect(float x)
     {
-
+        Instantiate(perfectEffectPrefab, EffectPos(x), Quaternion.identity);
     }
 
-    public void PerfectEffect(Transform rail)
+    public void GreatEffect(float x)
     {
-        GameObject effect = Instantiate(
-        perfectEffectPrefab,
-        rail.TransformPoint(0,0.002f,0),
-        Quaternion.identity,
-        rail);
+        Instantiate(greatEffectPrefab, EffectPos(x), Quaternion.identity);
     }
 
-    public void GreatEffect(Transform rail)
+    public void GoodEffect(float x)
     {
-        GameObject effect = Instantiate(
-        greatEffectPrefab,
-        rail.TransformPoint(0,0.002f,0),
-        Quaternion.identity,
-        rail);
+        Instantiate(goodEffectPrefab, EffectPos(x), Quaternion.identity);
     }
 
-    public void GoodEffect(Transform rail)
+    //押している間のエフェクト。消すのは呼び出し側（LongNote.Finish）が行う
+    public GameObject HoldEffect(float x)
     {
-        GameObject effect = Instantiate(
-        goodEffectPrefab,
-        rail.TransformPoint(0,0.002f,0),
-        Quaternion.identity,
-        rail);
-    }
-
-    public void HoldEffect(Transform rail, string key)
-    {
-        GameObject effect = Instantiate(
-        holdEffectPrefab,
-        rail.TransformPoint(0,0.002f,0),
-        Quaternion.identity,
-        rail);
-        switch (key)
-        {
-            case "d":
-                DHoldEffect = effect;
-                break;
-            case "f":
-                FHoldEffect = effect;
-                break;
-            case "j":
-                JHoldEffect = effect;
-                break;
-            case "k":
-                KHoldEffect = effect;
-                break;
-            default:
-                break;
-        }
+        return Instantiate(holdEffectPrefab, EffectPos(x), Quaternion.identity);
     }
 
 }

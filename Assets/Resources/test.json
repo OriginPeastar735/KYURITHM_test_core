@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 4,
+    "totalNotes": 18
+  },
+  "notes": [
+    {
+      "id": 1791544101555.2927,
+      "type": "tap",
+      "lane": 0,
+      "width": 4,
+      "tick": 3840
+    },
+    {
+      "id": 1791544109356.0718,
+      "type": "tap",
+      "lane": 4,
+      "width": 4,
+      "tick": 4320
+    },
+    {
+      "id": 1791544111277.124,
+      "type": "tap",
+      "lane": 8,
+      "width": 4,
+      "tick": 4800
+    },
+    {
+      "id": 1791544113534.2476,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 5280
+    },
+    {
+      "id": 1791544116958.504,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 5760
+    },
+    {
+      "id": 1791544120322.2373,
+      "type": "tap",
+      "lane": 20,
+      "width": 4,
+      "tick": 6240
+    },
+    {
+      "id": 1791544121898.4614,
+      "type": "tap",
+      "lane": 24,
+      "width": 4,
+      "tick": 6720
+    },
+    {
+      "id": 1791544123739.1128,
+      "type": "tap",
+      "lane": 28,
+      "width": 4,
+      "tick": 7200
+    },
+    {
+      "id": 1791544137195.8264,
+      "type": "tap",
+      "lane": 0,
+      "width": 2,
+      "tick": 7680
+    },
+    {
+      "id": 1791544142854.0178,
+      "type": "tap",
+      "lane": 2,
+      "width": 2,
+      "tick": 8160
+    },
+    {
+      "id": 1791544148049.2568,
+      "type": "tap",
+      "lane": 4,
+      "width": 12,
+      "tick": 9600
+    },
+    {
+      "id": 1791544162639.3594,
+      "type": "hold",
+      "lane": 3,
+      "width": 4,
+      "tick": 11520
+    },
+    {
+      "id": 1791544164391.5635,
+      "type": "hold",
+      "lane": 3,
+      "width": 4,
+      "tick": 12000
+    },
+    {
+      "id": 1791544165268.6003,
+      "type": "hold",
+      "lane": 3,
+      "width": 4,
+      "tick": 12480
+    },
+    {
+      "id": 1791544166093.8586,
+      "type": "hold",
+      "lane": 3,
+      "width": 4,
+      "tick": 12960
+    },
+    {
+      "id": 1791544169671.4517,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 0,
+            "width": 4,
+            "tick": 15360
+          },
+          "to": {
+            "lane": 0,
+            "width": 4,
+            "tick": 17280
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791544186090.553,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 0,
+            "width": 4,
+            "tick": 19200
+          },
+          "to": {
+            "lane": 4,
+            "width": 4,
+            "tick": 21120
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791544192574.1116,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 8,
+            "width": 8,
+            "tick": 23040
+          },
+          "to": {
+            "lane": 20,
+            "width": 4,
+            "tick": 24960
+          },
+          "curve": "linear"
+        }
+      ]
+    }
+  ]
+}

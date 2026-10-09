@@ -1,0 +1,173 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 4,
+    "totalNotes": 16
+  },
+  "notes": [
+    {
+      "id": 1791546984169.4827,
+      "type": "tap",
+      "lane": 0,
+      "width": 4,
+      "tick": 1920
+    },
+    {
+      "id": 1791546987262.5374,
+      "type": "tap",
+      "lane": 4,
+      "width": 8,
+      "tick": 2400
+    },
+    {
+      "id": 1791546996678.497,
+      "type": "tap",
+      "lane": 16,
+      "width": 2,
+      "tick": 2880
+    },
+    {
+      "id": 1791547000410.9197,
+      "type": "tap",
+      "lane": 20,
+      "width": 11,
+      "tick": 3360
+    },
+    {
+      "id": 1791547014116.5527,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 3840
+    },
+    {
+      "id": 1791547015798.0334,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 4320
+    },
+    {
+      "id": 1791547019010.1348,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 4800
+    },
+    {
+      "id": 1791547020401.6516,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 5280
+    },
+    {
+      "id": 1791547023563.3704,
+      "type": "hold",
+      "lane": 12,
+      "width": 4,
+      "tick": 5760
+    },
+    {
+      "id": 1791547024590.5537,
+      "type": "hold",
+      "lane": 11,
+      "width": 6,
+      "tick": 6240
+    },
+    {
+      "id": 1791547026931.9482,
+      "type": "hold",
+      "lane": 10,
+      "width": 8,
+      "tick": 6720
+    },
+    {
+      "id": 1791547027805.385,
+      "type": "hold",
+      "lane": 8,
+      "width": 12,
+      "tick": 7200
+    },
+    {
+      "id": 1791547046255.6995,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 8,
+            "width": 4,
+            "tick": 7680
+          },
+          "to": {
+            "lane": 8,
+            "width": 4,
+            "tick": 8640
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791547061784.524,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 12,
+            "width": 4,
+            "tick": 9600
+          },
+          "to": {
+            "lane": 16,
+            "width": 4,
+            "tick": 10560
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791547066995.6084,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 16,
+            "width": 4,
+            "tick": 11520
+          },
+          "to": {
+            "lane": 12,
+            "width": 4,
+            "tick": 12480
+          },
+          "curve": "in_curve"
+        }
+      ]
+    },
+    {
+      "id": 1791547074151.4375,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 12,
+            "width": 8,
+            "tick": 13440
+          },
+          "to": {
+            "lane": 20,
+            "width": 4,
+            "tick": 15360
+          },
+          "curve": "out_curve"
+        }
+      ]
+    }
+  ]
+}

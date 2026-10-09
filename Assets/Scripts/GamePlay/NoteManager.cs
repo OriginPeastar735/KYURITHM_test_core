@@ -32,6 +32,7 @@ public class NoteManager : MonoBehaviour
     private float barMillis;
     public int destroyedNotesCount = 0;
     public float barPertick = 1920f;
+    public int slideCheckpointTick = 240;//slide中の判定点の間隔(tick)。1920で1小節なので240は8分音符ごと
 
     //ノーツ情報
     [System.Serializable]
@@ -133,9 +134,8 @@ public class NoteManager : MonoBehaviour
         TextAsset jsonFile = Resources.Load<TextAsset>(fileName);
         NotesData notesData = JsonConvert.DeserializeObject<NotesData>(jsonFile.text);
 
+        //判定回数の合計。各Create関数でノーツの判定数を加算していく
         totalCombo = 0;
-
-        totalCombo += notesData.notes.Count;
 
         //KYURITHMフォーマットはmeta内、旧フォーマットはトップレベルのbpmを使う
         bpm = notesData.meta != null ? notesData.meta.bpm : notesData.bpm;
@@ -185,13 +185,12 @@ public class NoteManager : MonoBehaviour
     {
         float bar = CulcBar(tick);//1920tickで1小節
         float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
-        float lanePos = LanePos(lane);
-        //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
 
-        GameObject obj = Instantiate(NotePrefab);//railを親、objを子として生成
+        GameObject obj = Instantiate(NotePrefab);
         Note note = obj.GetComponent<Note>();
         note.scrollSpeed = scrollSpeed;
-        note.Init(bar, expectedTime, lanePos);
+        note.Init(bar, expectedTime, lane, width);
+        totalCombo += 1;
         //Debug.Log($"{rail.name} worldX={rail.position.x}");
 
         //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
@@ -203,13 +202,12 @@ public class NoteManager : MonoBehaviour
     {
         float bar = CulcBar(tick);//1920tickで1小節
         float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
-        float lanePos = LanePos(lane);
-        //ロングノーツの終点の時、始点のときのexpectedTimeを持ってくれば描画できるかも
 
-        GameObject obj = Instantiate(HoldPrefab);//railを親、objを子として生成
+        GameObject obj = Instantiate(HoldPrefab);
         Hold hold = obj.GetComponent<Hold>();
         hold.scrollSpeed = scrollSpeed;
-        hold.Init(bar, expectedTime, lanePos);
+        hold.Init(bar, expectedTime, lane, width);
+        totalCombo += 1;
         //Debug.Log($"{rail.name} worldX={rail.position.x}");
 
         //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
@@ -217,37 +215,46 @@ public class NoteManager : MonoBehaviour
         holds.Add(hold);
     }
 
+    //slideはセクションごとに1つのLongNoteとして生成する
     private void CreateSlide(List<SlideSection> sections)
     {
-        foreach(var section in sections){
-        float startBar = CulcBar(section.from.tick);
-        float endBar = CulcBar(section.to.tick);
-        float startExpectedTime = ExpectedTime(startBar);
-        float endExpectedTime = ExpectedTime(endBar);
-        float startLanePos = LanePos(section.from.lane);
-        float endLanePos = LanePos(section.to.lane);
-        
+        totalCombo += 1;//始点のタップ判定
+        for (int i = 0; i < sections.Count; i++)
+        {
+            var section = sections[i];
+            float startBar = CulcBar(section.from.tick);
+            float endBar = CulcBar(section.to.tick);
+            float startExpectedTime = ExpectedTime(startBar);
+            float endExpectedTime = ExpectedTime(endBar);
+            List<float> checkpointTimes = SlideCheckpointTimes(section.from.tick, section.to.tick);
 
-        GameObject obj = Instantiate(LongNotePrefab);
-        LongNote longNote = obj.GetComponent<LongNote>();
-        longNote.scrollSpeed = scrollSpeed;
+            GameObject obj = Instantiate(LongNotePrefab);
+            LongNote longNote = obj.GetComponent<LongNote>();
+            longNote.scrollSpeed = scrollSpeed;
 
-        longNote.Init(startBar, endBar, startExpectedTime, endExpectedTime, startLanePos, endLanePos);
+            longNote.Init(startBar, endBar, startExpectedTime, endExpectedTime,
+                          section.from.lane, section.from.width, section.to.lane, section.to.width,
+                          i == 0, i == sections.Count - 1, checkpointTimes,
+                          LongNote.ParseCurve(section.curve));
 
-        LongNotes.Add(longNote);
+            LongNotes.Add(longNote);
+            totalCombo += checkpointTimes.Count;
         }
-
     }
 
-    private void CreateLongNote(float startBar, float endBar, string railStr, Transform rail, float longStartTime, float longEndTime)
+    //slide中の判定点の時刻。始点の後からslideCheckpointTickごとに置き、終点にも必ず置く
+    private List<float> SlideCheckpointTimes(int startTick, int endTick)
     {
-        GameObject obj = Instantiate(LongNotePrefab, rail);//あとでプレハブ作ってね
-        LongNote longNote = obj.GetComponent<LongNote>();
-        longNote.scrollSpeed = scrollSpeed;
-
-        longNote.Init(startBar, endBar, longStartTime, longEndTime, longStartTime, longEndTime);
-
-        LongNotes.Add(longNote);
+        var times = new List<float>();
+        if (slideCheckpointTick > 0)
+        {
+            for (int tick = startTick + slideCheckpointTick; tick < endTick; tick += slideCheckpointTick)
+            {
+                times.Add(ExpectedTime(CulcBar(tick)));
+            }
+        }
+        times.Add(ExpectedTime(CulcBar(endTick)));
+        return times;
     }
 
     // ノーツの理想タイミングを計算する関数
@@ -320,21 +327,17 @@ public class NoteManager : MonoBehaviour
         }
     }
 
-    public void RemoveNote(Note note, string lane)
+    public void RemoveNote(Note note)
     {
         notes.Remove(note);
-        // switch (lane)
-        // {
-        // ここもまとめれるならswitch文でまとめたい
-        // }
     }
 
-    public void RemoveHold(Hold hold, string lane)
+    public void RemoveHold(Hold hold)
     {
         holds.Remove(hold);
     }
 
-    public void RemoveLongNote(LongNote longNote, string lane)
+    public void RemoveLongNote(LongNote longNote)
     {
         LongNotes.Remove(longNote);
     }
