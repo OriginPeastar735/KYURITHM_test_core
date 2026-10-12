@@ -26,8 +26,8 @@ public class LongNote : MonoBehaviour
     public float endExpectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
     private float presentBar;//楽曲の現在の小節位置
     private float endBar;//ロングノーツ終点
-    public float endZ;
-    public float startZ;
+    public float endZ;//終点のz座標
+    public float startZ;//始点のz座標
 
     [Header("Lane")]
     public int startLane;//始点レーン
@@ -62,8 +62,8 @@ public class LongNote : MonoBehaviour
         if (HoldNote != null)
         {
             //HoldNoteのCubeメッシュを差し替え、頂点座標をそのまま使えるようにTransformを初期化
-            bodyMesh = new Mesh();
-            bodyMesh.MarkDynamic();
+            bodyMesh = new Mesh();//空の形状データを作る
+            bodyMesh.MarkDynamic();//毎フレーム書き換えるメッシュだとUnityに伝え、処理を最適化させる
             HoldNote.GetComponent<MeshFilter>().mesh = bodyMesh;
             HoldNote.localPosition = Vector3.zero;
             HoldNote.localRotation = Quaternion.identity;
@@ -75,6 +75,7 @@ public class LongNote : MonoBehaviour
                      int startLane, int startWidth, int endLane, int endWidth,
                      bool isFirstSection, bool isLastSection, List<float> checkpointTimes, SlideCurve curve)
     {
+        //各変数の代入
         this.curve = curve;
         this.checkpointTimes = checkpointTimes;
         this.nextCheckpoint = 0;
@@ -128,6 +129,7 @@ public class LongNote : MonoBehaviour
     private void GetLaneRangeAtProgress(float t, out float lane, out float width)
     {
         float e = Ease(t);
+        //Lerp(a,b,t): aとbの間で、t割の位置の値を返す。
         lane = Mathf.Lerp(startLane, endLane, e);
         width = Mathf.Lerp(startWidth, endWidth, e);
     }
@@ -143,6 +145,7 @@ public class LongNote : MonoBehaviour
     //時刻timeにおける判定ライン上のレーン範囲（lane, width）。小数になりうる
     public void GetLaneRangeAt(float time, out float lane, out float width)
     {
+        //InverseLerp(a,b,v): vがaからbまでの何割の位置にあるかを返す。範囲外の値は0~1に収まる
         float t = Mathf.InverseLerp(startExpectedTime, endExpectedTime, time);
         GetLaneRangeAtProgress(t, out lane, out width);
     }
@@ -173,6 +176,8 @@ public class LongNote : MonoBehaviour
             if(StartNote != null) StartNote.gameObject.SetActive(false);//StartNoteを削除
         }
 
+        //outは関数から2つ以上の値を受け取る仕組み（returnで返せるのは1つだけのため）。
+        //「out float startLaneF」でここに変数を新しく作り、関数の中で代入された値が入る
         GetLaneRangeAtProgress(t0, out float startLaneF, out float startWidthF);
         float startX = LaneLayout.LanePos(startLaneF + startWidthF / 2f);
         float endX = LaneLayout.LanePos(endLane + endWidth / 2f);

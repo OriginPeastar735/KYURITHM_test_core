@@ -13,25 +13,32 @@ public class JudgeManager : MonoBehaviour
 {
     public static JudgeManager instance;
 
+    //判定の種類は4種類
     public static event Action Perfect;
     public static event Action Great;
     public static event Action Good;
     public static event Action Miss;
+
     //以前の音ゲーの演出用（RailBaseManager/MusicManagerが購読しているため残している）
     public static event Action DRailMove;
     public static event Action KRailMove;
     public static event Action PlayIsoSound;
 
+    //ノーツの判定猶予をここで設定
     [Header("判定幅(ms)")]
     public float perfectMs = 22.25f;
     public float greatMs = 40f;
     public float goodMs = 70f;
 
+    //スライドノーツの判定猶予設定
     [Header("slide")]
     public float slideReleaseGrace = 0.1f;//判定点の前後で指が離れていても許容する秒数（キーの持ち替え対策）
     public int slideLaneMargin = 0;//slideの範囲を左右に何レーン広げて判定するか（判定を甘くしたい場合に使う）
 
-    private float currentPlayTime;
+
+    private float currentPlayTime;//現在の音楽再生時間を記録する変数
+    //goodMs(ミリ秒)を秒に直した値を返すプロパティ（70ms → 0.07秒）。
+    //currentPlayTimeやexpectedTimeは秒なので、比べるために単位をそろえている
     private float GoodWindow => goodMs / 1000f;
 
     //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
@@ -50,6 +57,8 @@ public class JudgeManager : MonoBehaviour
         if (MusicManager.instance == null || NoteManager.instance == null || InputManager.instance == null) return;
 
         currentPlayTime = MusicManager.instance.CurrentPlayTime;
+
+        //Array.Clear(配列, 開始, 個数): 配列を初期値（false）に戻す
         Array.Clear(consumed, 0, consumed.Length);
 
         JudgeTaps();
@@ -68,16 +77,24 @@ public class JudgeManager : MonoBehaviour
             LongNote bestSlide = null;
             float bestTime = float.MaxValue;
 
+            //「今判定できるノーツのうち、一番早いもの」を探す。
+            //3つのifで条件に合わないノーツを飛ばし(continue)、全部通過したものを候補にする。
+            //bestTimeは最初とても大きい値なので、最初に条件を満たしたノーツが必ず候補になり、
+            //その後はより早いノーツが見つかるたびに入れ替わる。ループが終わると一番早いノーツが残る
             foreach (var note in NoteManager.instance.notes)
             {
+                //すでに見つけた候補より遅いノーツは飛ばす
                 if (note == null || note.expectedTime >= bestTime) continue;
+                //判定幅(±Good)の外にあるノーツは飛ばす
                 if (Mathf.Abs(currentPlayTime - note.expectedTime) > GoodWindow) continue;
+                //ノーツの範囲に、まだ使われていない「押した瞬間」の入力がなければ飛ばす
                 if (!HasFreeDown(note.lane, note.width)) continue;
                 bestNote = note;
-                bestSlide = null;
-                bestTime = note.expectedTime;
+                bestSlide = null;//候補は常に1つだけにする
+                bestTime = note.expectedTime;//次のノーツと比べるために時刻を記録する
             }
 
+            //slideの始点も同じbestTimeと比べるので、tapとslide始点を合わせた中で一番早いものが選ばれる
             foreach (var ln in NoteManager.instance.LongNotes)
             {
                 if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;

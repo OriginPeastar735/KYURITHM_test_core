@@ -10,12 +10,12 @@ public class InputManager : MonoBehaviour
 {
     public static InputManager instance;
 
-    public const int LaneCount = 32;
+    public const int LaneCount = 32;//音ゲーの仕様によりレーンは32本。
 
     public bool[] laneDown = new bool[LaneCount];//このフレームで押された
     public bool[] laneHeld = new bool[LaneCount];//押されている
     public bool[] laneUp = new bool[LaneCount];//このフレームで離された
-    private bool[] prevHeld = new bool[LaneCount];
+    private bool[] prevHeld = new bool[LaneCount];//直前のフレームで押されている
 
     //テストプレイ用キー配置（左から順に4レーンずつ担当）
     [SerializeField]
@@ -36,7 +36,10 @@ public class InputManager : MonoBehaviour
 
     void Update()
     {
+        //Array.Copy(元, 先, 個数): 配列の中身をコピーする。laneHeldの内容をprevHeldにコピー
         Array.Copy(laneHeld, prevHeld, LaneCount);
+
+        //現在のレーン押下情報の取得
         ReadInput(laneHeld);
 
         //前フレームとの差分から押した瞬間・離した瞬間を求める

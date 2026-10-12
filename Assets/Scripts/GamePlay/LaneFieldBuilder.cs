@@ -14,9 +14,12 @@ public class LaneFieldBuilder : MonoBehaviour
 
     void Awake()
     {
+        //プレイ開始時にレーンを構築する。
+        //ライトは1レーンに1つで32個、区切り線は両端を含むので33本をプレハブから生成する
         BuildLights();
         BuildLines();
     }
+
 
     private void BuildLights()
     {
@@ -68,9 +71,14 @@ public class LaneFieldBuilder : MonoBehaviour
         Renderer rend = obj.GetComponentInChildren<Renderer>();
         if (rend == null) return;
 
+        //boundsは見た目をぴったり囲む箱(バウンディングボックス)。
+        //bounds.size.xは、スケールや親の影響を反映した後の、ワールド空間での実際の横幅
         float currentWidth = rend.bounds.size.x;
         if (currentWidth <= 0) return;
 
+        //「目標の幅 ÷ 今の幅」が、何倍にすればよいかの倍率になる。
+        //例: 今の幅1.0で目標0.25なら0.25倍、今の幅0.5なら0.5倍 → どちらも結果は0.25
+        //プレハブが元々どんな大きさでも、必ず目標の幅になる
         Vector3 scale = obj.transform.localScale;
         scale.x *= width / currentWidth;
         obj.transform.localScale = scale;
