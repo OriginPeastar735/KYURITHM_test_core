@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.IO.Ports;
+using System.Threading;
 
 //入力をレーン単位の状態（押された/押されている/離された）に変換する
 //判定側はこのクラスだけを参照し、入力デバイスの違いはReadInputで吸収する
@@ -25,6 +27,18 @@ public class InputManager : MonoBehaviour
         KeyCode.J, KeyCode.K, KeyCode.L, KeyCode.Semicolon
     };
     private const int lanesPerKey = 4;
+
+
+    [SerializeField] private string portName = "COM5"; //シリアルポート名
+    private const int baudRate = 115200;
+    private const byte packetHeader = 0xAA;
+    private const int sensorCount = 8;
+
+    private SerialPort port;
+    private Thread readThread;
+    private volatile bool reading;
+    private volatile byte sensorMask;//受信スレッドが書き、Updateが読む
+
 
     void Awake()
     {
@@ -55,9 +69,12 @@ public class InputManager : MonoBehaviour
     private void ReadInput(bool[] held)
     {
         Array.Clear(held, 0, LaneCount);
-        for (int k = 0; k < testKeys.Length; k++)
+        byte mask = sensorMask;
+        for (int k = 0; k < sensorCount; k++)
         {
-            if (!Input.GetKey(testKeys[k])) continue;
+            bool pressed = (mask & (1 << k)) != 0
+                || (k < testKeys.Length && Input.GetKey(testKeys[k]));
+            if (!pressed) continue;
             for (int j = 0; j < lanesPerKey; j++)
             {
                 int lane = k * lanesPerKey + j;
@@ -87,5 +104,53 @@ public class InputManager : MonoBehaviour
             if (states[i]) return true;
         }
         return false;
+    }
+
+    void OnEnable()
+    {
+        try
+        {
+            port = new SerialPort(portName, baudRate);
+            port.DtrEnable = true;
+            port.ReadTimeout = 100;
+            port.Open();
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("コントローラーに接続できません: " + e.Message);
+            port = null;
+            return;//キーボードのみで動作
+        }
+        reading = true;
+        readThread = new Thread(ReadLoop) { IsBackground = true };
+        readThread.Start();
+    }
+
+    void OnDisable()
+    {
+        reading = false;
+        if (readThread != null) readThread.Join(300);
+        if (port != null && port.IsOpen) port.Close();
+    }
+
+    private void ReadLoop()
+    {
+        while (reading)
+        {
+            try
+            {
+                if (port.ReadByte() != packetHeader) continue;
+                sensorMask = (byte)port.ReadByte();
+            }
+            catch (TimeoutException)
+            {
+                sensorMask = 0;//データが途切れたら押しっぱなしにしない
+            }
+            catch (Exception)
+            {
+                break;//切断
+            }
+        }
+        sensorMask = 0;
     }
 }

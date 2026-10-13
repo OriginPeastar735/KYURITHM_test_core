@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "title": "KYURITHM_Chart",
+    "audioFileName": "",
+    "bpm": 120,
+    "offset": 0,
+    "hiSpeed": 1,
+    "split": 16,
+    "totalNotes": 22
+  },
+  "notes": [
+    {
+      "id": 1791879300446.326,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 1920
+    },
+    {
+      "id": 1791879327154.4702,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 2040
+    },
+    {
+      "id": 1791879329256.1587,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 2160
+    },
+    {
+      "id": 1791879333546.2175,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 2280
+    },
+    {
+      "id": 1791879335008.522,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 2400
+    },
+    {
+      "id": 1791879339698.46,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 2640
+    },
+    {
+      "id": 1791879341627.4539,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 2760
+    },
+    {
+      "id": 1791879343251.8557,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 2880
+    },
+    {
+      "id": 1791879346363.1233,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 3000
+    },
+    {
+      "id": 1791879347864.566,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 3120
+    },
+    {
+      "id": 1791879362403.4846,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 3360
+    },
+    {
+      "id": 1791879361051.05,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 3360
+    },
+    {
+      "id": 1791879367515.254,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 3600
+    },
+    {
+      "id": 1791879365897.1685,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 3600
+    },
+    {
+      "id": 1791879372672.0366,
+      "type": "tap",
+      "lane": 20,
+      "width": 4,
+      "tick": 3840
+    },
+    {
+      "id": 1791879375799.3887,
+      "type": "tap",
+      "lane": 16,
+      "width": 4,
+      "tick": 4080
+    },
+    {
+      "id": 1791879378769.5881,
+      "type": "tap",
+      "lane": 12,
+      "width": 4,
+      "tick": 4320
+    },
+    {
+      "id": 1791879380503.1824,
+      "type": "tap",
+      "lane": 8,
+      "width": 4,
+      "tick": 4560
+    },
+    {
+      "id": 1791879388223.9517,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 12,
+            "width": 4,
+            "tick": 4800
+          },
+          "to": {
+            "lane": 12,
+            "width": 4,
+            "tick": 5280
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791879391542.0867,
+      "type": "slide",
+      "sections": [
+        {
+          "from": {
+            "lane": 16,
+            "width": 4,
+            "tick": 4800
+          },
+          "to": {
+            "lane": 16,
+            "width": 4,
+            "tick": 5280
+          },
+          "curve": "linear"
+        }
+      ]
+    },
+    {
+      "id": 1791879407786.718,
+      "type": "hold",
+      "lane": 8,
+      "width": 4,
+      "tick": 5280
+    },
+    {
+      "id": 1791879406240.458,
+      "type": "hold",
+      "lane": 20,
+      "width": 4,
+      "tick": 5280
+    }
+  ]
+}
