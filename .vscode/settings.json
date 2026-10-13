@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "KYURITHM_test_core.sln"
+    "dotnet.defaultSolution": "KYURITHM.slnx"
 }
