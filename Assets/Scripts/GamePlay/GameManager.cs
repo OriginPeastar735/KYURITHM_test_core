@@ -2,19 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
-    
-
-    public enum GameScene
-    {
-        Opening,
-        MusicSelect,
-        Play,
-        Result
-    };
+    const string DefaultChartName = "test1013";//Playシーン単体で起動したときに使う譜面
 
     public int[] PlayResult = new int[7];//(score, combo, maxCombo, parfect, great, good, miss)
     public float playScore = 0;
@@ -27,10 +18,6 @@ public class GameManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI ComboText;
     [SerializeField] private TextMeshProUGUI ScoreText;
     string ComboStr;
-    //int CurrentScene = 1; // 0:opening, 1:musicselect, 2:play, 3:playresult
-    public GameScene CurrentScene { get; private set; }//外部から参照はできるが，書き込みはできない
-    int musicIndex = 0;
-    int difficultyIndex = 0;
 
     void Start()
     {
@@ -38,8 +25,9 @@ public class GameManager : MonoBehaviour
         {
             PlayResult[i] = 0;
         }
-        NoteManager.instance.LoadJson("test1013");
-        CurrentScene = GameScene.MusicSelect;
+        //MusicSelectを経由せずに起動した場合はChartNameが空なのでデフォルト譜面を読む
+        string chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
+        NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
     }
 
@@ -47,26 +35,6 @@ public class GameManager : MonoBehaviour
     void Update()
     {
         ComboText.text =  PlayResult[1].ToString();
-        if (Input.GetKeyDown("d") && CurrentScene == GameScene.MusicSelect)//難易度低下
-        {
-            difficultyIndex--;
-        }
-        if (Input.GetKeyDown("f") && CurrentScene == GameScene.MusicSelect)//難易度上昇
-        {
-            difficultyIndex++;
-        }
-        if (Input.GetKeyDown("j") && CurrentScene == GameScene.MusicSelect)//1つ下の曲へ
-        {
-            musicIndex--;
-        }
-        if (Input.GetKeyDown("k") && CurrentScene == GameScene.MusicSelect)//1つ上の曲へ
-        {
-            musicIndex++;
-        }
-        if (Input.GetKeyDown("a") && CurrentScene == GameScene.MusicSelect)//難易度低下
-        {
-            ChangeScene(GameScene.Play);
-        }
         PlayResult[0] = (int)(((theoScore * PlayResult[3]) / totalCombo) + ((theoScore * PlayResult[4] * greatCoef) / totalCombo) + ((theoScore * PlayResult[5] * goodCoef) / totalCombo));
         ScoreText.text = PlayResult[0].ToString();
     }
@@ -121,29 +89,5 @@ public class GameManager : MonoBehaviour
         JudgeManager.Great -= AddGreat;
         JudgeManager.Good -= AddGood;
         JudgeManager.Miss -= AddMiss;
-    }
-
-    public void ChangeScene(GameScene next)
-    {
-        CurrentScene = next;
-
-        switch (next)
-        {
-            case GameScene.Opening:
-                SceneManager.LoadScene("OpeningScene");
-                break;
-
-            case GameScene.MusicSelect:
-                SceneManager.LoadScene("MusicSelectScene");
-                break;
-
-            case GameScene.Play:
-                SceneManager.LoadScene("PlayScene");
-                break;
-
-            case GameScene.Result:
-                SceneManager.LoadScene("ResultScene");
-                break;
-        }
     }
 }

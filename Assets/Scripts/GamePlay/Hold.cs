@@ -12,7 +12,7 @@ public class Hold : MonoBehaviour
     public float expectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
     public int lane;//ノーツの始点レーン
     public int width;//ノーツが占めるレーン数
-    public float lanePos; //ノーツ中心のx座標
+    public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
     private float presentBar;//楽曲の現在の小節位置
     public bool judged = false;//判定（Perfect, Great...）が下されたかの変数。現在は未使用（判定済みのノーツはDeleteで消しているため）
 
@@ -23,18 +23,15 @@ public class Hold : MonoBehaviour
         this.lane = lane;
         this.width = width;
         //ノーツの中心は、始点レーンから幅の半分だけ進んだ位置（width=4なら2レーン分）。
-        //lane + width / 2f はまだレーン単位の値なので、LanePosでx座標に変換する
-        //例: lane=8, width=4 → 中心はレーン10の位置 → x = 0 - 10 × 0.25 = -2.5
-        this.lanePos = LaneLayout.LanePos(lane + width / 2f);
-        
+        //例: lane=8, width=4 → 中心はレーン10の位置。座標への変換はLaneLayoutで行う
+        this.centerLane = lane + width / 2f;
 
-        //プレハブは横幅1のCubeなので、scale.xがそのまま見た目の横幅になる
-        Vector3 scale = transform.localScale;
-        scale.x = width * LaneLayout.LaneWidth;
-        transform.localScale = scale;
+        //x,yと傾きはLaneSurfaceShapeが子の板で作る（傾斜の折れ目をまたぐ場合は折れ目で分割される）
+        //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
+        gameObject.AddComponent<LaneSurfaceShape>().SetRange(lane, width, 0.01f);
 
-        //計算されたlanePosをx座標に適用
-        transform.localPosition = new Vector3(lanePos, 0, 0);//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
+        //自身はz方向に動かすだけなので原点に置く
+        transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
     }
 
     public void UpdatePosition(float presentBar)
@@ -47,11 +44,9 @@ public class Hold : MonoBehaviour
         //scrollSpeedが大きいほど遠くに置かれ、その分速く流れてくるように見える。
         float z = (presentBar - noteBar) * scrollSpeed;
 
-        //ノーツ自身のローカル座標を指定。
-        //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値。
+        //ノーツ自身のローカル座標を指定（浮かせる高さはInitでLaneSurfaceShapeに渡している）
         Vector3 local = transform.localPosition;
         local.z = z;
-        local.y = 0.01f;
         transform.localPosition = local;
 
     }

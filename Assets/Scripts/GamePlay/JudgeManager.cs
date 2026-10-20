@@ -110,15 +110,15 @@ public class JudgeManager : MonoBehaviour
             {
                 float diff = currentPlayTime - bestNote.expectedTime;
                 Consume(bestNote.lane, bestNote.width);
-                ShowResult(GradeByTiming(diff), bestNote.lanePos, diff);
+                ShowResult(GradeByTiming(diff), bestNote.centerLane, diff);
                 bestNote.Delete();
             }
             else if (bestSlide != null)
             {
                 float diff = currentPlayTime - bestSlide.startExpectedTime;
-                float x = LaneLayout.LanePos(bestSlide.startLane + bestSlide.startWidth / 2f);
+                float centerLane = bestSlide.startLane + bestSlide.startWidth / 2f;
                 Consume(bestSlide.startLane, bestSlide.startWidth);
-                ShowResult(GradeByTiming(diff), x, diff);
+                ShowResult(GradeByTiming(diff), centerLane, diff);
                 bestSlide.Activate();
             }
             else
@@ -140,12 +140,12 @@ public class JudgeManager : MonoBehaviour
 
             if (InputManager.instance.AnyHeld(hold.lane, hold.width))
             {
-                ShowResult(JudgeResult.Perfect, hold.lanePos, diff);
+                ShowResult(JudgeResult.Perfect, hold.centerLane, diff);
                 hold.Delete();
             }
             else if (diff > GoodWindow)
             {
-                ShowResult(JudgeResult.Miss, hold.lanePos, diff);
+                ShowResult(JudgeResult.Miss, hold.centerLane, diff);
                 hold.Delete();
             }
         }
@@ -181,15 +181,15 @@ public class JudgeManager : MonoBehaviour
             float checkpoint = ln.checkpointTimes[ln.nextCheckpoint];
             if (currentPlayTime < checkpoint) break;//まだ判定点に来ていない
 
-            float x = ln.GetCenterXAt(checkpoint);
+            float centerLane = ln.GetCenterLaneAt(checkpoint);
             if (checkpoint - ln.lastHeldTime <= slideReleaseGrace)
             {
                 //判定点の直前(猶予内)から今までに触れていた
-                ShowResult(JudgeResult.Perfect, x, 0);
+                ShowResult(JudgeResult.Perfect, centerLane, 0);
             }
             else if (currentPlayTime - checkpoint > slideReleaseGrace)
             {
-                ShowResult(JudgeResult.Miss, x, currentPlayTime - checkpoint);
+                ShowResult(JudgeResult.Miss, centerLane, currentPlayTime - checkpoint);
             }
             else
             {
@@ -206,7 +206,7 @@ public class JudgeManager : MonoBehaviour
     {
         if (held && ln.holdEffect == null)
         {
-            ln.holdEffect = EffectManager.instance.HoldEffect(ln.GetCenterXAt(currentPlayTime));
+            ln.holdEffect = EffectManager.instance.HoldEffect(ln.GetCenterLaneAt(currentPlayTime));
         }
         else if (!held && ln.holdEffect != null)
         {
@@ -232,7 +232,7 @@ public class JudgeManager : MonoBehaviour
             if (note == null) continue;
             if (currentPlayTime - note.expectedTime > GoodWindow)
             {
-                ShowResult(JudgeResult.Miss, note.lanePos, currentPlayTime - note.expectedTime);
+                ShowResult(JudgeResult.Miss, note.centerLane, currentPlayTime - note.expectedTime);
                 note.Delete();
             }
         }
@@ -244,8 +244,8 @@ public class JudgeManager : MonoBehaviour
             if (diff > GoodWindow)
             {
                 //始点を逃してもslideは続き、以降の判定点は触れれば取れる
-                float x = LaneLayout.LanePos(ln.startLane + ln.startWidth / 2f);
-                ShowResult(JudgeResult.Miss, x, diff);
+                float centerLane = ln.startLane + ln.startWidth / 2f;
+                ShowResult(JudgeResult.Miss, centerLane, diff);
                 ln.Activate();
             }
         }
@@ -261,22 +261,22 @@ public class JudgeManager : MonoBehaviour
         return JudgeResult.Miss;
     }
 
-    //判定結果に応じてエフェクトとイベントを発行する
-    void ShowResult(JudgeResult result, float x, float diffSec)
+    //判定結果に応じてエフェクトとイベントを発行する（centerLaneはエフェクトを出すレーン位置）
+    void ShowResult(JudgeResult result, float centerLane, float diffSec)
     {
         Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
         switch (result)
         {
             case JudgeResult.Perfect:
-                EffectManager.instance.PerfectEffect(x);
+                EffectManager.instance.PerfectEffect(centerLane);
                 Perfect?.Invoke();
                 break;
             case JudgeResult.Great:
-                EffectManager.instance.GreatEffect(x);
+                EffectManager.instance.GreatEffect(centerLane);
                 Great?.Invoke();
                 break;
             case JudgeResult.Good:
-                EffectManager.instance.GoodEffect(x);
+                EffectManager.instance.GoodEffect(centerLane);
                 Good?.Invoke();
                 break;
             case JudgeResult.Miss:

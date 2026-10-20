@@ -269,12 +269,6 @@ public class NoteManager : MonoBehaviour
         return tick / barPertick;
     }
 
-    // ノーツのレーン位置を計算する関数（計算本体はLaneLayoutに集約）
-    private float LanePos(int lane)
-    {
-        return LaneLayout.LanePos(lane);
-    }
-
 
 
 

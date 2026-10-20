@@ -23,32 +23,38 @@ public class EffectManager : MonoBehaviour
         }
     }
 
-    //判定ライン上のx座標の位置を適用する
-    private Vector3 EffectPos(float x)
+    //判定ライン上の、レーン位置laneの面上の点
+    private Vector3 EffectPos(float lane)
     {
-        return new Vector3(x, effectY, judgeLineZ);
+        return LaneLayout.SurfacePoint(lane, effectY, judgeLineZ);
     }
 
-    // Vector3を用意してエフェクトをInstantiate
-    public void PerfectEffect(float x)
+    // レーン位置(ノーツの中心レーン)を受け取り、傾斜面に合わせた位置・向きでエフェクトをInstantiate
+    public void PerfectEffect(float lane)
     {
-        Instantiate(perfectEffectPrefab, EffectPos(x), Quaternion.identity);
+        Instantiate(perfectEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
-    public void GreatEffect(float x)
+    public void GreatEffect(float lane)
     {
-        Instantiate(greatEffectPrefab, EffectPos(x), Quaternion.identity);
+        Instantiate(greatEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
-    public void GoodEffect(float x)
+    public void GoodEffect(float lane)
     {
-        Instantiate(goodEffectPrefab, EffectPos(x), Quaternion.identity);
+        Instantiate(goodEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
     //押している間のエフェクト。消すのは呼び出し側（LongNote.Finish）が行う
-    public GameObject HoldEffect(float x)
+    public GameObject HoldEffect(float lane)
     {
-        return Instantiate(holdEffectPrefab, EffectPos(x), Quaternion.identity);
+        return Instantiate(holdEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+    }
+
+    //押している間のエフェクトをレーン位置laneに動かす（slideの移動に追従させる）
+    public void FollowLane(GameObject effect, float lane)
+    {
+        effect.transform.SetPositionAndRotation(EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
 }

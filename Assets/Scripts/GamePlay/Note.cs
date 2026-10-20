@@ -9,7 +9,7 @@ public class Note : MonoBehaviour
     public float expectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
     public int lane;//ノーツの始点レーン
     public int width;//ノーツが占めるレーン数
-    public float lanePos; //ノーツ中心のx座標
+    public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
     private float presentBar;//楽曲の現在の小節位置
     public bool judged = false;
 
@@ -19,14 +19,13 @@ public class Note : MonoBehaviour
         this.expectedTime = expectedTime;
         this.lane = lane;
         this.width = width;
-        this.lanePos = LaneLayout.LanePos(lane + width / 2f);
+        this.centerLane = lane + width / 2f;
 
-        //プレハブは横幅1のCubeなので、scale.xがそのまま見た目の横幅になる
-        Vector3 scale = transform.localScale;
-        scale.x = width * LaneLayout.LaneWidth;
-        transform.localScale = scale;
+        //x,yと傾きはLaneSurfaceShapeが子の板で作るので、自身はz方向に動かすだけ
+        //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
+        gameObject.AddComponent<LaneSurfaceShape>().SetRange(lane, width, 0.01f);
 
-        transform.localPosition = new Vector3(lanePos, 0, 0);//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
+        transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
     }
 
     public void UpdatePosition(float presentBar)
@@ -36,7 +35,6 @@ public class Note : MonoBehaviour
 
         Vector3 local = transform.localPosition;
         local.z = z;
-        local.y = 0.01f;
         transform.localPosition = local;
 
     }

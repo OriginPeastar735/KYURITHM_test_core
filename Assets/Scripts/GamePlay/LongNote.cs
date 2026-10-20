@@ -55,10 +55,19 @@ public class LongNote : MonoBehaviour
     public Transform HoldNote;
 
     private Mesh bodyMesh;//斜めの帯を描画するための動的メッシュ
-    private Vector3[] bodyVertices;//帯の頂点（始点側から順に左右2つずつ）
+    private Vector3[] bodyVertices;//帯の頂点（始点側から順に1行BodyColumns個ずつ）
+    //帯の1行の頂点数。両端と、傾斜の折れ目2つ（帯が折れ目にかからない行では端に重ねる）
+    private const int BodyColumns = LaneLayout.SegmentCount + 1;
+    private readonly float[] columnLanes = new float[BodyColumns];//1行分の頂点のレーン位置（毎フレーム使い回す）
+
+    private LaneSurfaceShape startShape;//始点・終点ノーツを傾斜に沿わせて描画する
+    private LaneSurfaceShape endShape;
 
     void Awake()
     {
+        if (StartNote != null) startShape = StartNote.gameObject.AddComponent<LaneSurfaceShape>();
+        if (EndNote != null) endShape = EndNote.gameObject.AddComponent<LaneSurfaceShape>();
+
         if (HoldNote != null)
         {
             //HoldNoteのCubeメッシュを差し替え、頂点座標をそのまま使えるようにTransformを初期化
@@ -92,9 +101,6 @@ public class LongNote : MonoBehaviour
 
         //親は原点に置き、x位置は子オブジェクト側で決める
         transform.localPosition = Vector3.zero;
-
-        SetNoteWidth(StartNote, startWidth);
-        SetNoteWidth(EndNote, endWidth);
 
         //2つ目以降のセクションの始点は前のセクションの終点と重なるので表示しない
         if (!isFirstSection && StartNote != null) StartNote.gameObject.SetActive(false);
@@ -134,14 +140,6 @@ public class LongNote : MonoBehaviour
         width = Mathf.Lerp(startWidth, endWidth, e);
     }
 
-    private void SetNoteWidth(Transform note, int width)
-    {
-        if (note == null) return;
-        Vector3 scale = note.localScale;
-        scale.x = width * LaneLayout.LaneWidth;
-        note.localScale = scale;
-    }
-
     //時刻timeにおける判定ライン上のレーン範囲（lane, width）。小数になりうる
     public void GetLaneRangeAt(float time, out float lane, out float width)
     {
@@ -150,11 +148,11 @@ public class LongNote : MonoBehaviour
         GetLaneRangeAtProgress(t, out lane, out width);
     }
 
-    //時刻timeにおける判定ライン上の中心x座標（エフェクト位置などで使用）
-    public float GetCenterXAt(float time)
+    //時刻timeにおける判定ライン上の中心レーン位置（エフェクト位置などで使用）
+    public float GetCenterLaneAt(float time)
     {
         GetLaneRangeAt(time, out float lane, out float width);
-        return LaneLayout.LanePos(lane + width / 2f);
+        return lane + width / 2f;
     }
 
     public void UpdatePosition(float presentBar)
@@ -179,11 +177,19 @@ public class LongNote : MonoBehaviour
         //outは関数から2つ以上の値を受け取る仕組み（returnで返せるのは1つだけのため）。
         //「out float startLaneF」でここに変数を新しく作り、関数の中で代入された値が入る
         GetLaneRangeAtProgress(t0, out float startLaneF, out float startWidthF);
-        float startX = LaneLayout.LanePos(startLaneF + startWidthF / 2f);
-        float endX = LaneLayout.LanePos(endLane + endWidth / 2f);
 
-        if(StartNote != null)StartNote.localPosition = new Vector3(startX,0.01f,startZ);
-        if(EndNote != null)EndNote.localPosition = new Vector3(endX,0.01f,endZ);
+        //x,yと傾きはLaneSurfaceShapeが決めるので、ここではz位置だけを設定する
+        //0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
+        if(StartNote != null)
+        {
+            StartNote.localPosition = new Vector3(0, 0, startZ);
+            startShape.SetRange(startLaneF, startWidthF, 0.01f);
+        }
+        if(EndNote != null)
+        {
+            EndNote.localPosition = new Vector3(0, 0, endZ);
+            endShape.SetRange(endLane, endWidth, 0.01f);
+        }
         if(bodyMesh != null)
         {
             UpdateBodyMesh(t0);
@@ -192,48 +198,50 @@ public class LongNote : MonoBehaviour
         //押している間のエフェクトを判定ライン上の現在位置に追従させる
         if(holdEffect != null)
         {
-            Vector3 pos = holdEffect.transform.position;
-            pos.x = startX;
-            holdEffect.transform.position = pos;
+            EffectManager.instance.FollowLane(holdEffect, startLaneF + startWidthF / 2f);
         }
     }
 
-    //帯をsegments個の四角形に分割したメッシュを用意する（頂点数と三角形は以後変わらない）
-    //  0 ── 1   ← 始点側
-    //  2 ── 3
-    //  4 ── 5   ← 終点側（segments=2の場合）
+    //帯をsegments個の行に分割したメッシュを用意する（頂点数と三角形は以後変わらない）
+    //1行は傾斜の折れ目で区切ったBodyColumns個の頂点で、折れ目をまたぐ帯も面に沿って折れ曲がる
+    //  0 ─ 1 ─ 2 ─ 3   ← 始点側
+    //  4 ─ 5 ─ 6 ─ 7
+    //  8 ─ 9 ─10 ─11   ← 終点側（segments=2の場合）
     private void SetupBodyMesh(int segments)
     {
-        int vertexCount = (segments + 1) * 2;
+        int vertexCount = (segments + 1) * BodyColumns;
         bodyVertices = new Vector3[vertexCount];
         var uv = new Vector2[vertexCount];
-        var normals = new Vector3[vertexCount];
-        var triangles = new int[segments * 6];
+        var triangles = new int[segments * (BodyColumns - 1) * 6];
 
         for (int i = 0; i <= segments; i++)
         {
             float v = (float)i / segments;
-            uv[i * 2] = new Vector2(0, v);
-            uv[i * 2 + 1] = new Vector2(1, v);
-            normals[i * 2] = Vector3.up;
-            normals[i * 2 + 1] = Vector3.up;
+            for (int c = 0; c < BodyColumns; c++)
+            {
+                uv[i * BodyColumns + c] = new Vector2((float)c / (BodyColumns - 1), v);
+            }
         }
+        int n = 0;
         for (int i = 0; i < segments; i++)
         {
-            int a = i * 2;//この区間の始点側の左
-            //上から見て時計回り（表面が上向き）
-            triangles[i * 6 + 0] = a;
-            triangles[i * 6 + 1] = a + 1;
-            triangles[i * 6 + 2] = a + 2;
-            triangles[i * 6 + 3] = a + 1;
-            triangles[i * 6 + 4] = a + 3;
-            triangles[i * 6 + 5] = a + 2;
+            for (int c = 0; c < BodyColumns - 1; c++)
+            {
+                int a = i * BodyColumns + c;//この四角形の始点側の左
+                int b = a + BodyColumns;//この四角形の終点側の左
+                //上から見て時計回り（表面が上向き）
+                triangles[n++] = a;
+                triangles[n++] = a + 1;
+                triangles[n++] = b;
+                triangles[n++] = a + 1;
+                triangles[n++] = b + 1;
+                triangles[n++] = b;
+            }
         }
 
         bodyMesh.Clear();
         bodyMesh.vertices = bodyVertices;
         bodyMesh.uv = uv;
-        bodyMesh.normals = normals;//帯は常に水平なので法線は上向きで固定
         bodyMesh.triangles = triangles;
     }
 
@@ -241,23 +249,33 @@ public class LongNote : MonoBehaviour
     private void UpdateBodyMesh(float t0)
     {
         const float y = 0.01f;
-        int segments = bodyVertices.Length / 2 - 1;
-        float lw = LaneLayout.LaneWidth * bodyWidthRatio;
+        int segments = bodyVertices.Length / BodyColumns - 1;
 
         for (int i = 0; i <= segments; i++)
         {
             float t = Mathf.Lerp(t0, 1f, (float)i / segments);
-            //zは時間に比例（一定速度でスクロール）、xは曲線に沿って変化する
+            //zは時間に比例（一定速度でスクロール）、レーン位置は曲線に沿って変化する
             float z = Mathf.Min((presentBar - Mathf.Lerp(startBar, endBar, t)) * scrollSpeed, startZ);
             GetLaneRangeAtProgress(t, out float lane, out float width);
-            float x = LaneLayout.LanePos(lane + width / 2f);
-            float w = width * lw;
+            float center = lane + width / 2f;
+            float half = width * bodyWidthRatio / 2f;
+            float from = center - half;
+            float to = center + half;
 
-            bodyVertices[i * 2] = new Vector3(x - w / 2, y, z);
-            bodyVertices[i * 2 + 1] = new Vector3(x + w / 2, y, z);
+            //laneが大きいほどxは小さいので、x の小さい側（laneの大きい側）から並べる
+            //折れ目が帯の外にある行では、Clampで端に重なり面積0の四角形になる
+            columnLanes[0] = to;
+            columnLanes[1] = Mathf.Clamp(LaneLayout.RightFold, from, to);
+            columnLanes[2] = Mathf.Clamp(LaneLayout.LeftFold, from, to);
+            columnLanes[3] = from;
+            for (int c = 0; c < BodyColumns; c++)
+            {
+                bodyVertices[i * BodyColumns + c] = LaneLayout.SurfacePoint(columnLanes[c], y, z);
+            }
         }
 
         bodyMesh.vertices = bodyVertices;
+        bodyMesh.RecalculateNormals();//傾斜の上では法線も傾くので毎回計算し直す
         bodyMesh.RecalculateBounds();
     }
 
