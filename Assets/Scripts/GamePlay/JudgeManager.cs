@@ -5,7 +5,7 @@ using UnityEngine;
 
 public enum JudgeResult
 {
-    Perfect, Great, Good, Miss
+    PrecisePlus, Precise, Approx, Miss
 }
 
 //InputManagerのレーン入力とノーツのlane/widthを照らし合わせて判定する
@@ -13,10 +13,10 @@ public class JudgeManager : MonoBehaviour
 {
     public static JudgeManager instance;
 
-    //判定の種類は4種類
-    public static event Action Perfect;
-    public static event Action Great;
-    public static event Action Good;
+    //判定の種類は4種類（PRECISE+ / PRECISE / APPROX / MISS）
+    public static event Action PrecisePlus;
+    public static event Action Precise;
+    public static event Action Approx;
     public static event Action Miss;
 
     //以前の音ゲーの演出用（RailBaseManager/MusicManagerが購読しているため残している）
@@ -24,11 +24,12 @@ public class JudgeManager : MonoBehaviour
     public static event Action KRailMove;
     public static event Action PlayIsoSound;
 
-    //ノーツの判定猶予をここで設定
+    //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
-    public float perfectMs = 22.25f;
-    public float greatMs = 40f;
-    public float goodMs = 70f;
+    public float precisePlusMs = 30f;
+    public float preciseMs = 60f;
+    public float approxMs = 100f;
+    public float missMs = 120f;//approxMsより外でもこの範囲内で押すとMISS（早押し・遅押しでノーツを消費する）
 
     //スライドノーツの判定猶予設定
     [Header("slide")]
@@ -37,9 +38,10 @@ public class JudgeManager : MonoBehaviour
 
 
     private float currentPlayTime;//現在の音楽再生時間を記録する変数
-    //goodMs(ミリ秒)を秒に直した値を返すプロパティ（70ms → 0.07秒）。
+    //missMs(ミリ秒)を秒に直した値を返すプロパティ（120ms → 0.12秒）。
     //currentPlayTimeやexpectedTimeは秒なので、比べるために単位をそろえている
-    private float GoodWindow => goodMs / 1000f;
+    //入力を受け付ける一番外側の範囲で、これを過ぎたノーツは見逃しMISSになる
+    private float MissWindow => missMs / 1000f;
 
     //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
     private readonly bool[] consumed = new bool[InputManager.LaneCount];
@@ -85,8 +87,8 @@ public class JudgeManager : MonoBehaviour
             {
                 //すでに見つけた候補より遅いノーツは飛ばす
                 if (note == null || note.expectedTime >= bestTime) continue;
-                //判定幅(±Good)の外にあるノーツは飛ばす
-                if (Mathf.Abs(currentPlayTime - note.expectedTime) > GoodWindow) continue;
+                //判定幅(±MISS)の外にあるノーツは飛ばす
+                if (Mathf.Abs(currentPlayTime - note.expectedTime) > MissWindow) continue;
                 //ノーツの範囲に、まだ使われていない「押した瞬間」の入力がなければ飛ばす
                 if (!HasFreeDown(note.lane, note.width)) continue;
                 bestNote = note;
@@ -99,7 +101,7 @@ public class JudgeManager : MonoBehaviour
             {
                 if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
                 if (ln.startExpectedTime >= bestTime) continue;
-                if (Mathf.Abs(currentPlayTime - ln.startExpectedTime) > GoodWindow) continue;
+                if (Mathf.Abs(currentPlayTime - ln.startExpectedTime) > MissWindow) continue;
                 if (!HasFreeDown(ln.startLane, ln.startWidth)) continue;
                 bestNote = null;
                 bestSlide = ln;
@@ -129,7 +131,7 @@ public class JudgeManager : MonoBehaviour
     }
 
     // ===== hold =====
-    //判定ラインを通過する時にノーツの範囲が押されていればPerfect
+    //判定ラインを通過する時にノーツの範囲が押されていればPRECISE+
     void JudgeHolds()
     {
         foreach (var hold in new List<Hold>(NoteManager.instance.holds))
@@ -140,10 +142,10 @@ public class JudgeManager : MonoBehaviour
 
             if (InputManager.instance.AnyHeld(hold.lane, hold.width))
             {
-                ShowResult(JudgeResult.Perfect, hold.centerLane, diff);
+                ShowResult(JudgeResult.PrecisePlus, hold.centerLane, diff);
                 hold.Delete();
             }
-            else if (diff > GoodWindow)
+            else if (diff > MissWindow)
             {
                 ShowResult(JudgeResult.Miss, hold.centerLane, diff);
                 hold.Delete();
@@ -185,7 +187,7 @@ public class JudgeManager : MonoBehaviour
             if (checkpoint - ln.lastHeldTime <= slideReleaseGrace)
             {
                 //判定点の直前(猶予内)から今までに触れていた
-                ShowResult(JudgeResult.Perfect, centerLane, 0);
+                ShowResult(JudgeResult.PrecisePlus, centerLane, 0);
             }
             else if (currentPlayTime - checkpoint > slideReleaseGrace)
             {
@@ -230,7 +232,7 @@ public class JudgeManager : MonoBehaviour
         foreach (var note in new List<Note>(NoteManager.instance.notes))
         {
             if (note == null) continue;
-            if (currentPlayTime - note.expectedTime > GoodWindow)
+            if (currentPlayTime - note.expectedTime > MissWindow)
             {
                 ShowResult(JudgeResult.Miss, note.centerLane, currentPlayTime - note.expectedTime);
                 note.Delete();
@@ -241,7 +243,7 @@ public class JudgeManager : MonoBehaviour
         {
             if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
             float diff = currentPlayTime - ln.startExpectedTime;
-            if (diff > GoodWindow)
+            if (diff > MissWindow)
             {
                 //始点を逃してもslideは続き、以降の判定点は触れれば取れる
                 float centerLane = ln.startLane + ln.startWidth / 2f;
@@ -255,10 +257,10 @@ public class JudgeManager : MonoBehaviour
     JudgeResult GradeByTiming(float diffSec)
     {
         float ms = Mathf.Abs(diffSec * 1000f);
-        if (ms <= perfectMs) return JudgeResult.Perfect;
-        if (ms <= greatMs) return JudgeResult.Great;
-        if (ms <= goodMs) return JudgeResult.Good;
-        return JudgeResult.Miss;
+        if (ms <= precisePlusMs) return JudgeResult.PrecisePlus;
+        if (ms <= preciseMs) return JudgeResult.Precise;
+        if (ms <= approxMs) return JudgeResult.Approx;
+        return JudgeResult.Miss;//approxMs〜missMsの範囲で押した場合
     }
 
     //判定結果に応じてエフェクトとイベントを発行する（centerLaneはエフェクトを出すレーン位置）
@@ -267,17 +269,17 @@ public class JudgeManager : MonoBehaviour
         Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
         switch (result)
         {
-            case JudgeResult.Perfect:
-                EffectManager.instance.PerfectEffect(centerLane);
-                Perfect?.Invoke();
+            case JudgeResult.PrecisePlus:
+                EffectManager.instance.PrecisePlusEffect(centerLane);
+                PrecisePlus?.Invoke();
                 break;
-            case JudgeResult.Great:
-                EffectManager.instance.GreatEffect(centerLane);
-                Great?.Invoke();
+            case JudgeResult.Precise:
+                EffectManager.instance.PreciseEffect(centerLane);
+                Precise?.Invoke();
                 break;
-            case JudgeResult.Good:
-                EffectManager.instance.GoodEffect(centerLane);
-                Good?.Invoke();
+            case JudgeResult.Approx:
+                EffectManager.instance.ApproxEffect(centerLane);
+                Approx?.Invoke();
                 break;
             case JudgeResult.Miss:
                 Miss?.Invoke();

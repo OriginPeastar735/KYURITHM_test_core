@@ -7,13 +7,15 @@ public class GameManager : MonoBehaviour
 {
     const string DefaultChartName = "test1013";//Playシーン単体で起動したときに使う譜面
 
-    public int[] PlayResult = new int[7];//(score, combo, maxCombo, parfect, great, good, miss)
+    public int[] PlayResult = new int[7];//(score, combo, maxCombo, precisePlus, precise, approx, miss)
     public float playScore = 0;
 
-    public int theoScore = 1010000;
+    //1ノーツあたり baseScore / totalCombo 点を基準に、判定ごとの割合(%)を掛けて加算する
+    public int baseScore = 10000000;
     public int totalCombo = 0;
-    public float greatCoef = 0.8f;//great coefficient
-    public float goodCoef = 0.5f;
+    const int PrecisePlusRate = 101;//PRECISE+ 101%
+    const int PreciseRate = 100;//PRECISE 100%
+    const int ApproxRate = 50;//APPROX 50%（MISSは0%）
 
     [SerializeField] private TextMeshProUGUI ComboText;
     [SerializeField] private TextMeshProUGUI ScoreText;
@@ -35,21 +37,30 @@ public class GameManager : MonoBehaviour
     void Update()
     {
         ComboText.text =  PlayResult[1].ToString();
-        PlayResult[0] = (int)(((theoScore * PlayResult[3]) / totalCombo) + ((theoScore * PlayResult[4] * greatCoef) / totalCombo) + ((theoScore * PlayResult[5] * goodCoef) / totalCombo));
+        PlayResult[0] = CalcScore();
         ScoreText.text = PlayResult[0].ToString();
     }
 
-    void AddPerfect()
+    //全ノーツPRECISE+で baseScore の101%になる
+    //小数の誤差で1点ずれないよう、longの整数で計算してから最後に割る（intだと掛け算であふれる）
+    int CalcScore()
+    {
+        if (totalCombo <= 0) return 0;
+        long rateSum = (long)PlayResult[3] * PrecisePlusRate + (long)PlayResult[4] * PreciseRate + (long)PlayResult[5] * ApproxRate;
+        return (int)(baseScore * rateSum / (100L * totalCombo));
+    }
+
+    void AddPrecisePlus()
     {
         PlayResult[3]++;
         AddCombo();
     }
-    void AddGreat()
+    void AddPrecise()
     {
         PlayResult[4]++;
         AddCombo();
     }
-    void AddGood()
+    void AddApprox()
     {
         PlayResult[5]++;
         AddCombo();
@@ -77,17 +88,17 @@ public class GameManager : MonoBehaviour
 
     void OnEnable()
     {
-        JudgeManager.Perfect += AddPerfect;
-        JudgeManager.Great += AddGreat;
-        JudgeManager.Good += AddGood;
+        JudgeManager.PrecisePlus += AddPrecisePlus;
+        JudgeManager.Precise += AddPrecise;
+        JudgeManager.Approx += AddApprox;
         JudgeManager.Miss += AddMiss;
     }
 
     void OnDisable()
     {
-        JudgeManager.Perfect -= AddPerfect;
-        JudgeManager.Great -= AddGreat;
-        JudgeManager.Good -= AddGood;
+        JudgeManager.PrecisePlus -= AddPrecisePlus;
+        JudgeManager.Precise -= AddPrecise;
+        JudgeManager.Approx -= AddApprox;
         JudgeManager.Miss -= AddMiss;
     }
 }

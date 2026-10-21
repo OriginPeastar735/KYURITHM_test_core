@@ -5,6 +5,14 @@ using UnityEngine;
 using System.IO.Ports;
 using System.Threading;
 
+//入力元。Inspectorまたはプレイ中にswitchKeyで切り替える
+public enum InputSource
+{
+    Keyboard,//キーボードのみ（コントローラー無しでのテストプレイ用）
+    Controller,//専用コントローラーのみ（本番用）
+    Both//両方（どちらで押しても反応する）
+}
+
 //入力をレーン単位の状態（押された/押されている/離された）に変換する
 //判定側はこのクラスだけを参照し、入力デバイスの違いはReadInputで吸収する
 [DefaultExecutionOrder(-100)]//JudgeManagerより先に入力を更新する
@@ -19,6 +27,10 @@ public class InputManager : MonoBehaviour
     public bool[] laneUp = new bool[LaneCount];//このフレームで離された
     private bool[] prevHeld = new bool[LaneCount];//直前のフレームで押されている
 
+    [Header("入力元の切り替え")]
+    [SerializeField] private InputSource source = InputSource.Both;
+    [SerializeField] private KeyCode switchKey = KeyCode.F1;//プレイ中に押すと Keyboard → Controller → Both の順に切り替わる
+
     //テストプレイ用キー配置（左から順に4レーンずつ担当）
     [SerializeField]
     private KeyCode[] testKeys =
@@ -29,15 +41,22 @@ public class InputManager : MonoBehaviour
     private const int lanesPerKey = 4;
 
 
+    //専用コントローラー（Arduino）のパケット: ヘッダー0xAA ＋ 4バイト = 5バイト
+    //  1バイト目: lane 0〜7（左斜面）  2バイト目: lane 8〜15（底面）
+    //  3バイト目: lane16〜23（底面）    4バイト目: lane24〜31（右斜面）
+    //  各バイトの最下位ビット(bit0)が一番小さいレーン番号。1なら押されている
     [SerializeField] private string portName = "COM5"; //シリアルポート名
     private const int baudRate = 115200;
     private const byte packetHeader = 0xAA;
-    private const int sensorCount = 8;
+    private const int payloadBytes = LaneCount / 8;//4バイト
 
     private SerialPort port;
     private Thread readThread;
     private volatile bool reading;
-    private volatile byte sensorMask;//受信スレッドが書き、Updateが読む
+    private volatile uint sensorMask;//32レーン分の押下状態(bit i = lane i)。受信スレッドが書き、Updateが読む
+
+    private bool UseKeyboard => source != InputSource.Controller;
+    private bool UseController => source != InputSource.Keyboard;
 
 
     void Awake()
@@ -50,6 +69,11 @@ public class InputManager : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(switchKey))
+        {
+            SetSource((InputSource)(((int)source + 1) % 3));
+        }
+
         //Array.Copy(元, 先, 個数): 配列の中身をコピーする。laneHeldの内容をprevHeldにコピー
         Array.Copy(laneHeld, prevHeld, LaneCount);
 
@@ -64,21 +88,39 @@ public class InputManager : MonoBehaviour
         }
     }
 
+    //入力元を切り替える。コントローラーを使わないモードではシリアルポートを閉じる
+    public void SetSource(InputSource newSource)
+    {
+        source = newSource;
+        if (UseController) OpenController();
+        else CloseController();
+        Debug.Log($"入力元: {source}");
+    }
+
     //現在押されているレーンをheldに書き込む
-    //専用コントローラー対応時はここを差し替える
     private void ReadInput(bool[] held)
     {
         Array.Clear(held, 0, LaneCount);
-        byte mask = sensorMask;
-        for (int k = 0; k < sensorCount; k++)
+
+        if (UseController)
         {
-            bool pressed = (mask & (1 << k)) != 0
-                || (k < testKeys.Length && Input.GetKey(testKeys[k]));
-            if (!pressed) continue;
-            for (int j = 0; j < lanesPerKey; j++)
+            uint mask = sensorMask;
+            for (int lane = 0; lane < LaneCount; lane++)
             {
-                int lane = k * lanesPerKey + j;
-                if (lane < LaneCount) held[lane] = true;
+                if ((mask & (1u << lane)) != 0) held[lane] = true;
+            }
+        }
+
+        if (UseKeyboard)
+        {
+            for (int k = 0; k < testKeys.Length; k++)
+            {
+                if (!Input.GetKey(testKeys[k])) continue;
+                for (int j = 0; j < lanesPerKey; j++)
+                {
+                    int lane = k * lanesPerKey + j;
+                    if (lane < LaneCount) held[lane] = true;
+                }
             }
         }
     }
@@ -108,6 +150,17 @@ public class InputManager : MonoBehaviour
 
     void OnEnable()
     {
+        if (UseController) OpenController();
+    }
+
+    void OnDisable()
+    {
+        CloseController();
+    }
+
+    private void OpenController()
+    {
+        if (port != null) return;//接続済み
         try
         {
             port = new SerialPort(portName, baudRate);
@@ -126,11 +179,14 @@ public class InputManager : MonoBehaviour
         readThread.Start();
     }
 
-    void OnDisable()
+    private void CloseController()
     {
         reading = false;
         if (readThread != null) readThread.Join(300);
+        readThread = null;
         if (port != null && port.IsOpen) port.Close();
+        port = null;
+        sensorMask = 0;
     }
 
     private void ReadLoop()
@@ -139,8 +195,16 @@ public class InputManager : MonoBehaviour
         {
             try
             {
+                //ヘッダーが来るまで読み飛ばし、続く4バイトを32レーン分のビットにまとめる
                 if (port.ReadByte() != packetHeader) continue;
-                sensorMask = (byte)port.ReadByte();
+                uint mask = 0;
+                for (int i = 0; i < payloadBytes; i++)
+                {
+                    int b = port.ReadByte();
+                    if (b < 0) throw new TimeoutException();
+                    mask |= (uint)b << (i * 8);
+                }
+                sensorMask = mask;
             }
             catch (TimeoutException)
             {

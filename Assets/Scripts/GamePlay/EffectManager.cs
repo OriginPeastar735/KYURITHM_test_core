@@ -1,13 +1,15 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class EffectManager : MonoBehaviour
 {
     //ここにエフェクトのVFXを格納する
-    public GameObject perfectEffectPrefab;
-    public GameObject greatEffectPrefab;
-    public GameObject goodEffectPrefab;
+    //FormerlySerializedAs: 旧名(perfect/great/good)でシーンに保存された割り当てを引き継ぐ
+    [FormerlySerializedAs("perfectEffectPrefab")] public GameObject precisePlusEffectPrefab;
+    [FormerlySerializedAs("greatEffectPrefab")] public GameObject preciseEffectPrefab;
+    [FormerlySerializedAs("goodEffectPrefab")] public GameObject approxEffectPrefab;
     public GameObject holdEffectPrefab;
 
     public static EffectManager instance;
@@ -30,19 +32,19 @@ public class EffectManager : MonoBehaviour
     }
 
     // レーン位置(ノーツの中心レーン)を受け取り、傾斜面に合わせた位置・向きでエフェクトをInstantiate
-    public void PerfectEffect(float lane)
+    public void PrecisePlusEffect(float lane)
     {
-        Instantiate(perfectEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Instantiate(precisePlusEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
-    public void GreatEffect(float lane)
+    public void PreciseEffect(float lane)
     {
-        Instantiate(greatEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Instantiate(preciseEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
-    public void GoodEffect(float lane)
+    public void ApproxEffect(float lane)
     {
-        Instantiate(goodEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Instantiate(approxEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
     }
 
     //押している間のエフェクト。消すのは呼び出し側（LongNote.Finish）が行う

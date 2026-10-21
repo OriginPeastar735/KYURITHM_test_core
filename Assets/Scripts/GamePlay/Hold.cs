@@ -1,4 +1,4 @@
-//Holdノーツ: レールを押しっぱなしでも判定ライン通過時にPerfectとして処理される。
+//Holdノーツ: レールを押しっぱなしでも判定ライン通過時にPRECISE+として処理される。
 //判定ラインを過ぎてから判定幅(Good)以内に一度も押されなければMissになる。
 
 using System.Collections;
@@ -14,7 +14,7 @@ public class Hold : MonoBehaviour
     public int width;//ノーツが占めるレーン数
     public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
     private float presentBar;//楽曲の現在の小節位置
-    public bool judged = false;//判定（Perfect, Great...）が下されたかの変数。現在は未使用（判定済みのノーツはDeleteで消しているため）
+    public bool judged = false;//判定（PRECISE+, PRECISE...）が下されたかの変数。現在は未使用（判定済みのノーツはDeleteで消しているため）
 
     public void Init(float noteBar, float expectedTime, int lane, int width)
     {
