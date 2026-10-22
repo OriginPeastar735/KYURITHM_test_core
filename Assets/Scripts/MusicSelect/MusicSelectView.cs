@@ -30,13 +30,6 @@ public class MusicSelectView : MonoBehaviour
     [Tooltip("斜面センサーで隠れる部分を暗く表示する（センサー無しのモニターでテストするとき用）")]
     public bool showHiddenArea = true;
 
-    static readonly Color[] difficultyColors =
-    {
-        new Color(0.15f, 0.45f, 0.75f),//NORMAL
-        new Color(0.80f, 0.35f, 0.15f),//HARD
-        new Color(0.50f, 0.20f, 0.75f),//EXTRA
-    };
-
     private Font font;
     private Sprite gradient;
     private RectTransform root;
@@ -124,6 +117,12 @@ public class MusicSelectView : MonoBehaviour
         glows[(int)zone].lit = lit;
     }
 
+    //押しても何も起きないエリアは光らせない
+    public void SetZoneEnabled(SelectZone zone, bool enabled)
+    {
+        glows[(int)zone].enabled = enabled;
+    }
+
     public void PlayDecide()
     {
         decideFlash = 1f;
@@ -187,10 +186,12 @@ public class MusicSelectView : MonoBehaviour
         {
             ZoneGlow glow = glows[z];
             bool lit = glow.lit || (z == (int)SelectZone.Decide && decideFlash > 0f);
-            glow.level = Mathf.Lerp(glow.level, lit ? 1f : idle, k);
+            float targetLevel = !glow.enabled ? 0f : lit ? 1f : idle;
+            glow.level = Mathf.Lerp(glow.level, targetLevel, k);
             Color c = glow.color;
             c.a = glow.level;
             glow.image.color = c;
+            if (glow.label != null) glow.label.color = new Color(1f, 1f, 1f, glow.enabled ? 1f : 0.2f);
         }
     }
 
@@ -245,9 +246,9 @@ public class MusicSelectView : MonoBehaviour
         var cyan = new Color(0.3f, 0.8f, 1f);
         var pink = new Color(1f, 0.4f, 0.75f);
         BuildSlopeGlow(layer, new Vector2(0f, 0f), new Vector2(SlopeSpan / 2f, SlopeSpan / 2f), -45f,
-                       SelectZone.SortPrev, SelectZone.SortNext, "←  ソート切り替え  →", cyan);
+                       SelectZone.SortPrev, SelectZone.SortNext, "ソート切り替え", "←", "→", cyan);
         BuildSlopeGlow(layer, new Vector2(1f, 0f), new Vector2(-SlopeSpan / 2f, SlopeSpan / 2f), 45f,
-                       SelectZone.DiffDown, SelectZone.DiffUp, "−  難易度切り替え  +", pink);
+                       SelectZone.DiffDown, SelectZone.DiffUp, "難易度切り替え", "−", "+", pink);
     }
 
     void BuildHiddenArea(RectTransform parent, Vector2 corner)
@@ -270,7 +271,7 @@ public class MusicSelectView : MonoBehaviour
 
     //斜面のセンサーに沿って光る帯。帯の下辺がセンサーの線に重なり、見える側(+y)に向かって薄くなる
     void BuildSlopeGlow(RectTransform parent, Vector2 corner, Vector2 center, float angle,
-                        SelectZone lowerLaneZone, SelectZone upperLaneZone, string label, Color color)
+                        SelectZone lowerLaneZone, SelectZone upperLaneZone, string label, string lowerSign, string upperSign, Color color)
     {
         var slope = CreateRect("Slope", parent);
         Place(slope, corner, corner, new Vector2(0.5f, 0.5f), center, new Vector2(SlopeLength, 0f));
@@ -279,15 +280,19 @@ public class MusicSelectView : MonoBehaviour
         const float gap = 4f;
         float half = SlopeLength / 2f;
         SelectZone[] zones = { lowerLaneZone, upperLaneZone };
+        string[] signs = { lowerSign, upperSign };
         for (int i = 0; i < 2; i++)
         {
             var image = CreateImage(zones[i].ToString(), slope, color, gradient);
             Place(image.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-half + i * half + gap, 0f), new Vector2(half - gap * 2f, 130f));
-            glows[(int)zones[i]] = new ZoneGlow { image = image, color = color };
+            //記号はそれぞれのエリアの上に置き、押せないときは薄くする
+            var sign = CreateText(zones[i] + "Sign", slope, signs[i], 48, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Place(sign.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-half / 2f + i * half, 55f), new Vector2(half, 60f));
+            glows[(int)zones[i]] = new ZoneGlow { image = image, color = color, label = sign };
         }
 
-        var text = CreateText("Label", slope, label, 32, TextAnchor.MiddleCenter, FontStyle.Bold);
-        Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0f), new Vector2(0f, 110f), new Vector2(SlopeLength, 50f));
+        var text = CreateText("Label", slope, label, 30, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0f), new Vector2(0f, 105f), new Vector2(SlopeLength, 50f));
     }
 
     //下が不透明で上に向かって透明になる縦グラデーション
@@ -369,7 +374,9 @@ public class MusicSelectView : MonoBehaviour
     {
         public Image image;
         public Color color;
+        public Text label;//押せないときに薄くする文字（無ければnull）
         public bool lit;
+        public bool enabled = true;
         public float level;
     }
 
@@ -425,13 +432,13 @@ public class MusicSelectView : MonoBehaviour
         public void SetSong(SongData song, int difficultyIndex)
         {
             DifficultyData diff = song.difficulties[difficultyIndex];
-            background.color = difficultyColors[Mathf.Min(difficultyIndex, difficultyColors.Length - 1)];
-            difficultyName.text = diff.name;
+            background.color = DifficultyInfo.Colors[difficultyIndex];
+            difficultyName.text = DifficultyInfo.Names[difficultyIndex];
             level.text = $"Lv.{diff.level}";
             title.text = song.title;
             artist.text = song.artist;
-            rank.text = "RANK -";//プレイ状況.jsonができたら差し替える
-            highScore.text = "HIGH SCORE\n0";
+            rank.text = "RANK -";//ランク基準が決まったら差し替える
+            highScore.text = diff.highScore > 0 ? $"HIGH SCORE\n{diff.highScore:N0}" : "HIGH SCORE\n未プレイ";
 
             Sprite sprite = string.IsNullOrEmpty(song.jacketPath) ? null : Resources.Load<Sprite>(song.jacketPath);
             jacket.sprite = sprite;

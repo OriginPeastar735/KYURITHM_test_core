@@ -45,14 +45,16 @@ public class MusicSelectManager : MonoBehaviour
     public float startInputLock = 0.5f;//シーン開始直後に入力を受け付けない時間（前の画面からの押しっぱなし対策）
     public float decideDelay = 0.6f;//決定してからプレイ画面に移るまでの時間
 
-    enum SortMode { Default, Title, Level }
-    static readonly string[] sortNames = { "デフォルト", "曲名順", "レベル順" };
+    //ソートボタンを押すとこの順に切り替わる（端まで行くと反対側に戻る）
+    enum SortMode { TitleAsc, LevelAsc, LevelDesc, ScoreAsc, ScoreDesc }
+    static readonly string[] sortNames = { "曲名 昇順", "レベル 昇順", "レベル 降順", "スコア 昇順", "スコア 降順" };
 
     private List<SongData> songs;
-    private List<int> order = new List<int>();//ソート後の並び（songsのインデックス）
-    private SortMode sortMode = SortMode.Default;
+    private List<int> order = new List<int>();//今の難易度がある曲だけをソートした並び（songsのインデックス）
+    private SortMode sortMode = SortMode.TitleAsc;
     private int position = 0;//選択位置。左右に何周しても動けるよう範囲外の値も取り、使うときにorderの長さで割った余りにする
-    private int difficulty = 0;//選んでいる難易度。その曲に無い難易度なら一番上の難易度を表示する
+    private int difficulty = 0;//選んでいる難易度。最初は一番低い難易度
+    private int maxDifficulty;//どれかの曲に存在する一番高い難易度
 
     private MusicSelectView view;
     private float remainingTime;
@@ -76,6 +78,7 @@ public class MusicSelectManager : MonoBehaviour
         }
 
         songs = PlaceholderSongs.Create();
+        foreach (var song in songs) maxDifficulty = Mathf.Max(maxDifficulty, song.difficulties.Count - 1);
         ApplySort();
 
         view = gameObject.AddComponent<MusicSelectView>();
@@ -91,6 +94,9 @@ public class MusicSelectManager : MonoBehaviour
     void Update()
     {
         ReadZones();
+        //これ以上下げられない・上げられない難易度ボタンは光らせない
+        view.SetZoneEnabled(SelectZone.DiffDown, difficulty > 0);
+        view.SetZoneEnabled(SelectZone.DiffUp, difficulty < maxDifficulty);
         for (int z = 0; z < ZoneCount; z++) view.SetZoneLit((SelectZone)z, held[z] && !decided);
 
         if (!decided)
@@ -172,14 +178,13 @@ public class MusicSelectManager : MonoBehaviour
         action();
     }
 
+    //難易度を変えると、その難易度がある曲だけの並びに作り直す
     void ChangeDifficulty(int delta)
     {
-        int max = SelectedSong.difficulties.Count - 1;
-        int next = Mathf.Clamp(DisplayDifficulty(SelectedSong) + delta, 0, max);
-        if (next == DisplayDifficulty(SelectedSong)) return;
+        int next = Mathf.Clamp(difficulty + delta, 0, maxDifficulty);
+        if (next == difficulty) return;
         difficulty = next;
-        if (sortMode == SortMode.Level) ResortKeepingSelection();
-        view.RefreshCards();
+        ResortKeepingSelection();
     }
 
     void ChangeSort(int delta)
@@ -191,36 +196,53 @@ public class MusicSelectManager : MonoBehaviour
     }
 
     //並び替えても選んでいた曲を選んだままにする
+    //選んでいた曲が新しい並びに無い場合（その難易度が無い曲）は、元の並びでその次にある曲を選ぶ
     void ResortKeepingSelection()
     {
-        int selectedId = order[Mod(position, order.Count)];
+        var oldOrder = new List<int>(order);
+        int oldIndex = Mod(position, oldOrder.Count);
         ApplySort();
-        position = order.IndexOf(selectedId);
+
+        position = 0;
+        for (int i = 0; i < oldOrder.Count; i++)
+        {
+            int index = order.IndexOf(oldOrder[(oldIndex + i) % oldOrder.Count]);
+            if (index >= 0)
+            {
+                position = index;
+                break;
+            }
+        }
         view.Snap(position);
     }
 
     void ApplySort()
     {
         order.Clear();
-        for (int i = 0; i < songs.Count; i++) order.Add(i);
-        switch (sortMode)
+        for (int i = 0; i < songs.Count; i++)
         {
-            case SortMode.Title:
-                order.Sort((a, b) => string.CompareOrdinal(songs[a].title, songs[b].title));
-                break;
-            case SortMode.Level:
-                order.Sort((a, b) =>
-                {
-                    int c = LevelOf(songs[a]).CompareTo(LevelOf(songs[b]));
-                    return c != 0 ? c : a.CompareTo(b);
-                });
-                break;
+            if (songs[i].difficulties.Count > difficulty) order.Add(i);
         }
+
+        order.Sort((a, b) =>
+        {
+            int c = 0;
+            switch (sortMode)
+            {
+                case SortMode.LevelAsc: c = Chart(a).level.CompareTo(Chart(b).level); break;
+                case SortMode.LevelDesc: c = Chart(b).level.CompareTo(Chart(a).level); break;
+                case SortMode.ScoreAsc: c = Chart(a).highScore.CompareTo(Chart(b).highScore); break;
+                case SortMode.ScoreDesc: c = Chart(b).highScore.CompareTo(Chart(a).highScore); break;
+            }
+            //同じ値どうしは曲名の昇順
+            return c != 0 ? c : string.CompareOrdinal(songs[a].title, songs[b].title);
+        });
     }
 
-    int LevelOf(SongData song)
+    //songs[songIndex]の今の難易度の譜面
+    DifficultyData Chart(int songIndex)
     {
-        return song.difficulties[DisplayDifficulty(song)].level;
+        return songs[songIndex].difficulties[difficulty];
     }
 
     // ===== 決定 =====
@@ -251,10 +273,10 @@ public class MusicSelectManager : MonoBehaviour
         return songs[order[Mod(p, order.Count)]];
     }
 
-    //その曲で表示する難易度。選んだ難易度が無い曲は一番上の難易度にする
+    //その曲で表示する難易度。並びには今の難易度がある曲しか入らないので、常に選んでいる難易度になる
     int DisplayDifficulty(SongData song)
     {
-        return Mathf.Min(difficulty, song.difficulties.Count - 1);
+        return difficulty;
     }
 
     static int Mod(int a, int n)
