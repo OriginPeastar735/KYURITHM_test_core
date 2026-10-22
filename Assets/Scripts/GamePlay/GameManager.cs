@@ -11,7 +11,8 @@ public class GameManager : MonoBehaviour
     public float playScore = 0;
 
     //1ノーツあたり baseScore / totalCombo 点を基準に、判定ごとの割合(%)を掛けて加算する
-    public int baseScore = 10000000;
+    //全PRECISEで100万点(ALL PRECISE)、全PRECISE+で101万点(理論値)
+    public int baseScore = 1000000;
     public int totalCombo = 0;
     const int PrecisePlusRate = 101;//PRECISE+ 101%
     const int PreciseRate = 100;//PRECISE 100%
@@ -41,7 +42,7 @@ public class GameManager : MonoBehaviour
         ScoreText.text = PlayResult[0].ToString();
     }
 
-    //全ノーツPRECISE+で baseScore の101%になる
+    //全ノーツPRECISE+で baseScore の101%(101万点)になる
     //小数の誤差で1点ずれないよう、longの整数で計算してから最後に割る（intだと掛け算であふれる）
     int CalcScore()
     {
