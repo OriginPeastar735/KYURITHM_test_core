@@ -14,7 +14,9 @@ public class CardInfo
     public string squareText = "";
     public int squareTextSize = 40;
     public string title = "";
+    public int titleSize = 0;//0なら曲名用の大きさ
     public string subtitle = "";
+    public int subtitleSize = 0;//0なら作曲者名用の大きさ
     public string rank;//nullなら表示しない
     public string highScore;//nullなら表示しない
 
@@ -55,16 +57,18 @@ public class MusicSelectView : MonoBehaviour
     static readonly float BottomWidth = SlopeLength * 2f;//底面センサーの長さ
 
     //カード。選択中のサイズで作り、選択されていないカードは縮小して表示する
-    public const float CardWidth = 560f;
-    public const float CardHeight = 800f;
-    const float CardPadding = 12f;
+    public const float CardWidth = 540f;
+    public const float CardHeight = 712f;
+    const float CardPadding = 6f;
+    const float JacketSize = 420f;
     //曲名はひらがな22字が1行に収まる文字サイズ（全角1字の幅 ≒ 文字サイズ）。それより長い曲名は縮小する
     static readonly int TitleFontSize = Mathf.FloorToInt((CardWidth - CardPadding * 2f) / 22f);
+    const int SubtitleFontSize = 20;
 
     //カードの配置。中央からの距離(0,1,2,3枚目)ごとのx座標
     const int VisibleRange = 3;//中央から左右に何枚まで置くか（3枚目は画面外で、スクロール時に入ってくる）
-    static readonly float[] cardX = { 0f, 453f, 782f, 1111f };
-    const float SelectedY = -20f;
+    static readonly float[] cardX = { 0f, 441f, 764f, 1086f };
+    const float SelectedY = 20f;
     const float SideY = 40f;
     const float SideScale = 0.56f;//選択されていないカードの大きさ（選択中のカードに対する倍率）
     const float ScrollSpeed = 20f;//スクロールの追従の速さ
@@ -82,7 +86,7 @@ public class MusicSelectView : MonoBehaviour
     private Text playerText, trackText, timerText, infoText;
     private readonly List<SongCard> cards = new List<SongCard>();
     private readonly ZoneGlow[] glows = new ZoneGlow[MusicSelectManager.ZoneCount];
-    private Text leftSlopeTitle, rightSlopeTitle;
+    private SlopeVisual leftSlope, rightSlope;
 
     //ソートのポップアップ
     private RectTransform popup;
@@ -122,6 +126,7 @@ public class MusicSelectView : MonoBehaviour
         var cardLayer = CreateRect("Cards", root);
         Stretch(cardLayer);
         for (int i = 0; i < VisibleRange * 2 + 1; i++) cards.Add(new SongCard(this, cardLayer));
+        BuildEdgeShade();
 
         BuildGlows();
         BuildHeader();
@@ -186,7 +191,13 @@ public class MusicSelectView : MonoBehaviour
     //斜面の真ん中の文字（「ソート切り替え」「戻る」など）
     public void SetSlopeTitle(bool left, string text)
     {
-        (left ? leftSlopeTitle : rightSlopeTitle).text = text;
+        (left ? leftSlope : rightSlope).title.text = text;
+    }
+
+    //true: 斜面の2つのエリアを1つのボタンとして光らせる（戻るボタンなど）
+    public void SetSlopeMerged(bool left, bool merged)
+    {
+        (left ? leftSlope : rightSlope).merged = merged;
     }
 
     public void ShowSortPopup(string[] names, int current)
@@ -276,15 +287,25 @@ public class MusicSelectView : MonoBehaviour
             glow.image.color = c;
             glow.label.color = new Color(1f, 1f, 1f, glow.enabled ? 1f : 0.2f);
         }
-        //斜面の真ん中の文字は、両側とも押せないときだけ薄くする
-        leftSlopeTitle.color = SlopeTitleColor(SelectZone.SortPrev, SelectZone.SortNext);
-        rightSlopeTitle.color = SlopeTitleColor(SelectZone.DiffDown, SelectZone.DiffUp);
+        UpdateSlope(leftSlope);
+        UpdateSlope(rightSlope);
     }
 
-    Color SlopeTitleColor(SelectZone a, SelectZone b)
+    void UpdateSlope(SlopeVisual slope)
     {
-        bool enabled = glows[(int)a].enabled || glows[(int)b].enabled;
-        return new Color(1f, 1f, 1f, enabled ? 1f : 0.2f);
+        ZoneGlow a = glows[(int)slope.lower];
+        ZoneGlow b = glows[(int)slope.upper];
+        //1つのボタンとして光らせるときは、左右に分かれた光を消して斜面全体の光を出す
+        Color whole = a.color;
+        whole.a = slope.merged ? Mathf.Max(a.level, b.level) : 0f;
+        slope.whole.color = whole;
+        if (slope.merged)
+        {
+            a.image.color = Color.clear;
+            b.image.color = Color.clear;
+        }
+        //真ん中の文字は、両側とも押せないときだけ薄くする
+        slope.title.color = new Color(1f, 1f, 1f, a.enabled || b.enabled ? 1f : 0.2f);
     }
 
     // ===== 画面の組み立て =====
@@ -337,10 +358,23 @@ public class MusicSelectView : MonoBehaviour
         //左斜面は画面左辺から右下へ下る線、右斜面は画面下辺から右上へ上る線。どちらもレーン番号が小さい側がローカルの-x
         var cyan = new Color(0.3f, 0.8f, 1f);
         var pink = new Color(1f, 0.4f, 0.75f);
-        leftSlopeTitle = BuildSlopeGlow(layer, new Vector2(0f, 0f), new Vector2(SlopeSpan / 2f, SlopeSpan / 2f), -45f,
-                                        SelectZone.SortPrev, SelectZone.SortNext, cyan);
-        rightSlopeTitle = BuildSlopeGlow(layer, new Vector2(1f, 0f), new Vector2(-SlopeSpan / 2f, SlopeSpan / 2f), 45f,
-                                         SelectZone.DiffDown, SelectZone.DiffUp, pink);
+        leftSlope = BuildSlopeGlow(layer, new Vector2(0f, 0f), new Vector2(SlopeSpan / 2f, SlopeSpan / 2f), -45f,
+                                   SelectZone.SortPrev, SelectZone.SortNext, cyan);
+        rightSlope = BuildSlopeGlow(layer, new Vector2(1f, 0f), new Vector2(-SlopeSpan / 2f, SlopeSpan / 2f), 45f,
+                                    SelectZone.DiffDown, SelectZone.DiffUp, pink);
+    }
+
+    //画面の左右の端を暗くして奥行きを出す（カードより手前、操作エリアの光より奥に描く）
+    void BuildEdgeShade()
+    {
+        const float width = 420f;
+        Sprite shade = CreateEdgeShadeSprite();
+        var color = new Color(0f, 0f, 0f, 0.75f);
+        var left = CreateImage("EdgeShadeLeft", root, color, shade).rectTransform;
+        Place(left, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(width, 0f));
+        var right = CreateImage("EdgeShadeRight", root, color, shade).rectTransform;
+        Place(right, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(width, 0f));
+        right.localScale = new Vector3(-1f, 1f, 1f);//左右反転して右端用にする
     }
 
     void BuildHiddenArea(RectTransform parent, Vector2 corner)
@@ -363,31 +397,33 @@ public class MusicSelectView : MonoBehaviour
     }
 
     //斜面のセンサーに沿って光る帯。帯の下辺がセンサーの線に重なり、見える側(+y)に向かって薄くなる
-    //戻り値は真ん中の文字
-    Text BuildSlopeGlow(RectTransform parent, Vector2 corner, Vector2 center, float angle,
-                        SelectZone lowerLaneZone, SelectZone upperLaneZone, Color color)
+    SlopeVisual BuildSlopeGlow(RectTransform parent, Vector2 corner, Vector2 center, float angle,
+                               SelectZone lowerLaneZone, SelectZone upperLaneZone, Color color)
     {
         var slope = CreateRect("Slope", parent);
         Place(slope, corner, corner, new Vector2(0.5f, 0.5f), center, new Vector2(SlopeLength, 0f));
         slope.localRotation = Quaternion.Euler(0f, 0f, angle);
 
+        //斜面全体を1つのボタンとして光らせるとき用（戻るボタンなど）
         const float gap = 4f;
+        var whole = CreateImage("Whole", slope, Color.clear, gradient);
+        Place(whole.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(SlopeLength - gap * 2f, SlopeGlowHeight));
+
         float half = SlopeLength / 2f;
         SelectZone[] zones = { lowerLaneZone, upperLaneZone };
         for (int i = 0; i < 2; i++)
         {
             var image = CreateImage(zones[i].ToString(), slope, color, gradient);
             Place(image.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-half + i * half + gap, 0f), new Vector2(half - gap * 2f, SlopeGlowHeight));
-            //記号はそれぞれのエリアの中央に置く。斜めにすると＋が×に見えるので、回転を打ち消してまっすぐ立てる
+            //記号はそれぞれのエリアの中央に、斜面に沿って傾けて置く
             var sign = CreateText(zones[i] + "Sign", slope, "", 36, TextAnchor.MiddleCenter, FontStyle.Bold);
             Place(sign.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-half / 2f + i * half, SlopeGlowHeight / 2f), new Vector2(60f, 60f));
-            sign.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -angle);
             glows[(int)zones[i]] = new ZoneGlow { image = image, color = color, label = sign };
         }
 
         var title = CreateText("Title", slope, "", 24, TextAnchor.MiddleCenter, FontStyle.Bold);
         Place(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, SlopeGlowHeight / 2f), new Vector2(half, SlopeGlowHeight));
-        return title;
+        return new SlopeVisual { whole = whole, title = title, lower = lowerLaneZone, upper = upperLaneZone };
     }
 
     //ソートのポップアップ（画面中央）。中身の行はShowSortPopupで作る
@@ -437,6 +473,24 @@ public class MusicSelectView : MonoBehaviour
         }
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, 1, height), new Vector2(0.5f, 0.5f));
+    }
+
+    //左が不透明で右に向かって透明になる横グラデーション（画面端の影用）
+    static Sprite CreateEdgeShadeSprite()
+    {
+        const int width = 64;
+        var tex = new Texture2D(width, 1, TextureFormat.RGBA32, false)
+        {
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+        for (int x = 0; x < width; x++)
+        {
+            float t = x / (float)(width - 1);
+            tex.SetPixel(x, 0, new Color(1f, 1f, 1f, (1f - t) * (1f - t)));
+        }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, width, 1), new Vector2(0.5f, 0.5f));
     }
 
     // ===== UI生成の共通処理 =====
@@ -506,6 +560,15 @@ public class MusicSelectView : MonoBehaviour
         public float level;
     }
 
+    //斜面1本分の表示
+    class SlopeVisual
+    {
+        public Image whole;//斜面全体の光（mergedのときだけ使う）
+        public Text title;
+        public SelectZone lower, upper;
+        public bool merged;
+    }
+
     // ===== カード =====
     //選択中のサイズ(CardWidth x CardHeight)で作り、選択されていないカードは縮小して表示する
     class SongCard
@@ -534,19 +597,19 @@ public class MusicSelectView : MonoBehaviour
             FitOneLine(topLarge);
 
             square = view.CreateImage("Square", rect, Color.gray);
-            PlaceTop(square.rectTransform, 112f, new Vector2(500f, 500f));
+            PlaceTop(square.rectTransform, 112f, new Vector2(JacketSize, JacketSize));
             squareText = view.CreateText("SquareText", square.rectTransform, "", 40, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(squareText.rectTransform);
 
             title = view.CreateText("Title", rect, "", TitleFontSize, TextAnchor.MiddleCenter, FontStyle.Bold);
-            PlaceTop(title.rectTransform, 624f, new Vector2(inner, 34f));
+            PlaceTop(title.rectTransform, 542f, new Vector2(inner, 40f));
             FitOneLine(title);
-            subtitle = view.CreateText("Subtitle", rect, "", 20, TextAnchor.MiddleCenter);
-            PlaceTop(subtitle.rectTransform, 660f, new Vector2(inner, 28f));
+            subtitle = view.CreateText("Subtitle", rect, "", SubtitleFontSize, TextAnchor.MiddleCenter);
+            PlaceTop(subtitle.rectTransform, 584f, new Vector2(inner, 34f));
             FitOneLine(subtitle);
 
             var detailRect = view.CreateRect("Detail", rect);
-            PlaceTop(detailRect, 700f, new Vector2(inner, 86f));
+            PlaceTop(detailRect, 622f, new Vector2(inner - 12f, 80f));
             detail = detailRect.gameObject.AddComponent<CanvasGroup>();
             rank = view.CreateText("Rank", detailRect, "", 44, TextAnchor.MiddleLeft, FontStyle.Bold);
             Stretch(rank.rectTransform);
@@ -569,7 +632,9 @@ public class MusicSelectView : MonoBehaviour
             squareText.fontSize = info.squareTextSize;
             squareText.color = info.squareSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.8f);
             title.text = info.title;
+            title.resizeTextMaxSize = info.titleSize > 0 ? info.titleSize : TitleFontSize;
             subtitle.text = info.subtitle;
+            subtitle.resizeTextMaxSize = info.subtitleSize > 0 ? info.subtitleSize : SubtitleFontSize;
             rank.text = info.rank ?? "";
             highScore.text = info.highScore ?? "";
         }
