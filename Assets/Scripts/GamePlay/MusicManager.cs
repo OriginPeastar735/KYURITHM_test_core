@@ -32,6 +32,14 @@ public class MusicManager : MonoBehaviour
         IsoAudioSource = gameObject.AddComponent<AudioSource>();
         audioSource.clip = shiningStar;
         IsoAudioSource.clip = isoSound;
+        //再生前はノーツを曲が始まるstartDelay秒前の位置に置いておく
+        CurrentPlayTime = offset - startDelay;
+        //選曲画面の楽曲紹介が出ている間は、紹介が終わるまで再生を待つ
+        if (!PlaySession.WaitingForIntro) StartMusic();
+    }
+
+    void StartMusic()
+    {
         dspStartTime = AudioSettings.dspTime + startDelay;
 
         //指定したdspTimeに再生予約（dspは精度のいいタイマー）
@@ -42,7 +50,11 @@ public class MusicManager : MonoBehaviour
 
     void Update()
     {
-        if(!isPlaying)return;
+        if (!isPlaying)
+        {
+            if (!PlaySession.WaitingForIntro) StartMusic();
+            return;
+        }
 
         //現在のplayTime = 現在のdspTime-再生開始dspTime
         //再生前はマイナスの値になり、再生されると0から始まる

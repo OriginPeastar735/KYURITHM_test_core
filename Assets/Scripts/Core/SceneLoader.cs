@@ -1,4 +1,5 @@
-// ChangeSceneだけを持つstaticクラス
+// シーンの切り替えを持つstaticクラス
+using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public static class SceneLoader
@@ -27,5 +28,15 @@ public static class SceneLoader
                 SceneManager.LoadScene("Result");
                 break;
         }
+    }
+
+    // 次のシーンを裏で読み込んでおく（演出を出している間に読み込みを済ませる用）
+    // 読み込みが終わってもすぐには切り替わらない。切り替えるときは戻り値の allowSceneActivation を true にする
+    public static AsyncOperation PreloadScene(GameScene next)
+    {
+        CurrentScene = next;
+        AsyncOperation operation = SceneManager.LoadSceneAsync(next.ToString());//シーン名はGameSceneの名前と同じ
+        operation.allowSceneActivation = false;
+        return operation;
     }
 }

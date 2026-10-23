@@ -9,6 +9,7 @@ public static class PlaySession
     public static int MusicIndex;
     public static int Difficulty;
     public static string ChartName;//空ならPlay側でデフォルト譜面を使う
+    public static bool WaitingForIntro;//楽曲紹介の表示中。trueの間はプレイ画面の曲を再生しない
 
     // プレイ設定（選曲画面の設定カードで変更する。プレイ画面への反映はまだ）
     public static float HiSpeed = 5f;//ノーツの速さ

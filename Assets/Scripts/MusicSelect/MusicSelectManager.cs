@@ -53,8 +53,9 @@ public class MusicSelectManager : MonoBehaviour
 
     [Header("楽曲紹介画面(秒)")]
     public float introFadeIn = 0.4f;//紹介画面が出てくるまで
-    public float introHold = 3f;//紹介画面を表示しておく時間
-    public float introFadeOut = 1f;//暗転してプレイ画面に移るまで
+    public float introHold = 3f;//紹介画面を表示しておく時間（ジャケットが出てから）
+    public float introFadeOut = 1f;//紹介画面が薄くなってプレイ画面が見えるまで
+    public float introCharInterval = 0.05f;//曲名などを1文字ずつ出す間隔
 
     enum Phase { SelectSong, Confirm, Settings }
 
@@ -315,12 +316,8 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
         CloseSortPopup();
         view.PlayDecide();
-        view.PlayIntro(song, difficulty, introFadeIn, introHold, introFadeOut, GoToPlay);
-    }
-
-    void GoToPlay()
-    {
-        SceneLoader.ChangeScene(GameScene.Play);
+        //紹介画面を出している間にプレイ画面を読み込み、そのままプレイ画面へ移る
+        view.PlayIntro(song, difficulty, introFadeIn, introHold, introFadeOut, introCharInterval);
     }
 
     // ===== 操作エリアの表示 =====
@@ -542,6 +539,7 @@ public class MusicSelectManager : MonoBehaviour
             squareTextSize = 200,
             title = "ランダム選曲",
             titleSize = 48,
+            titleInBottomCenter = true,
         };
     }
 
