@@ -52,10 +52,10 @@ public class MusicSelectManager : MonoBehaviour
     public float sortPopupDuration = 2.5f;//ソートのポップアップを最後の操作から何秒出しておくか
 
     [Header("楽曲紹介画面(秒)")]
-    public float introFadeIn = 0.4f;//紹介画面が出てくるまで
-    public float introHold = 3f;//紹介画面を表示しておく時間（ジャケットが出てから）
+    public float introFadeIn = 1f;//ジャケットと見出しが出てくるまで
+    public float introReveal = 1f;//曲名などを1文字ずつ出し切り、ジャケット裏の正方形がずれるまで（文字数に関係なくこの時間）
+    public float introHold = 3f;//出し切ったあと見せておく時間
     public float introFadeOut = 1f;//紹介画面が薄くなってプレイ画面が見えるまで
-    public float introCharInterval = 0.05f;//曲名などを1文字ずつ出す間隔
 
     enum Phase { SelectSong, Confirm, Settings }
 
@@ -317,7 +317,7 @@ public class MusicSelectManager : MonoBehaviour
         CloseSortPopup();
         view.PlayDecide();
         //紹介画面を出している間にプレイ画面を読み込み、そのままプレイ画面へ移る
-        view.PlayIntro(song, difficulty, introFadeIn, introHold, introFadeOut, introCharInterval);
+        view.PlayIntro(song, difficulty, introFadeIn, introReveal, introHold, introFadeOut);
     }
 
     // ===== 操作エリアの表示 =====

@@ -256,7 +256,7 @@ public class MusicSelectView : MonoBehaviour
 
     //楽曲紹介画面を出し、そのままプレイ画面へ移る（進行はIntroScreenが行う）
     //紹介画面はプレイ画面に切り替わった後も残す必要があるので、選曲画面とは別の、シーンが変わっても消えないCanvasに作る
-    public void PlayIntro(SongData song, int difficulty, float fadeIn, float hold, float fadeOut, float charInterval)
+    public void PlayIntro(SongData song, int difficulty, float fadeIn, float reveal, float hold, float fadeOut)
     {
         const float jacketSize = 560f;
         const float jacketY = 60f;
@@ -272,9 +272,9 @@ public class MusicSelectView : MonoBehaviour
         var content = CreateRect("Content", intro);
         Stretch(content);
 
-        //ジャケット（右下にずらした、難易度の色の正方形を裏に置く）
-        var shadow = CreateImage("JacketShadow", content, DifficultyInfo.Colors[difficulty]).rectTransform;
-        Place(shadow, center, center, center, new Vector2(28f, jacketY - 28f), new Vector2(jacketSize, jacketSize));
+        //ジャケットの裏に難易度の色の正方形を置く。最初はジャケットと同じ位置で隠れていて、後で右下にずれて見える
+        var jacketBack = CreateImage("JacketBack", content, DifficultyInfo.Colors[difficulty]).rectTransform;
+        Place(jacketBack, center, center, center, new Vector2(0f, jacketY), new Vector2(jacketSize, jacketSize));
         CardInfo card = CardInfo.FromSong(song, difficulty);
         var jacket = CreateImage("Jacket", content, card.squareColor, card.squareSprite);
         Place(jacket.rectTransform, center, center, center, new Vector2(0f, jacketY), new Vector2(jacketSize, jacketSize));
@@ -293,7 +293,8 @@ public class MusicSelectView : MonoBehaviour
         Text designer = BuildIntroInfo(content, "譜面制作", song.difficulties[difficulty].designer ?? "", new Vector2(infoX, jacketY - 130f));
 
         //曲名・作曲者・譜面制作者は1文字ずつ出す
-        intro.gameObject.AddComponent<IntroScreen>().Play(group, content, new[] { title, artist, designer }, fadeIn, hold, fadeOut, charInterval);
+        intro.gameObject.AddComponent<IntroScreen>().Play(group, content, new[] { title, artist, designer }, jacketBack, new Vector2(28f, -28f),
+                                                          fadeIn, reveal, hold, fadeOut);
     }
 
     //戻り値は値の文字（1文字ずつ出すため）
