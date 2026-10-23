@@ -9,4 +9,9 @@ public static class PlaySession
     public static int MusicIndex;
     public static int Difficulty;
     public static string ChartName;//空ならPlay側でデフォルト譜面を使う
+
+    // プレイ設定（選曲画面の設定カードで変更する。プレイ画面への反映はまだ）
+    public static float HiSpeed = 5f;//ノーツの速さ
+    public static int TimingOffsetMs = 0;//判定タイミングの調整(ms)
+    public static bool ShowFastLate = true;//FAST/LATEを表示するか
 }
