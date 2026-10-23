@@ -321,6 +321,9 @@ public class NoteManager : MonoBehaviour
         }
     }
 
+    //譜面を読み込んだ後に、tap/hold/slideがすべて判定されてリストが空になったか（曲の終了判定に使う）
+    public bool AllNotesCleared => totalCombo > 0 && notes.Count == 0 && holds.Count == 0 && LongNotes.Count == 0;
+
     public void RemoveNote(Note note)
     {
         notes.Remove(note);

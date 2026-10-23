@@ -20,7 +20,10 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI ComboText;
     [SerializeField] private TextMeshProUGUI ScoreText;
+    [SerializeField] private ResultScreen resultScreen;//全ノーツが消えたらこのパネルを割り込ませてリザルトを出す
+    [SerializeField] private GameObject hideOnResult;//リザルトが出ると同時に非アクティブにするもの（プレイ中だけ使うCanvasなど）
     string ComboStr;
+    bool isFinished = false;//リザルトを1回だけ出すためのフラグ
 
     void Start()
     {
@@ -40,6 +43,13 @@ public class GameManager : MonoBehaviour
         ComboText.text =  PlayResult[1].ToString();
         PlayResult[0] = CalcScore();
         ScoreText.text = PlayResult[0].ToString();
+
+        //最後のノーツの判定でPlayResultは確定しているので、リストが空になったらそのままリザルトを出す
+        if (!isFinished && NoteManager.instance.AllNotesCleared)
+        {
+            isFinished = true;
+            if (resultScreen != null) resultScreen.Show(PlayResult, hideOnResult);
+        }
     }
 
     //全ノーツPRECISE+で baseScore の101%(101万点)になる

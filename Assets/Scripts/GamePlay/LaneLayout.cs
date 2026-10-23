@@ -13,7 +13,8 @@ public static class LaneLayout
     public static float FieldWidth = 8f;//フィールド全体の幅（傾斜を平らに伸ばしたときの長さ。見た目に合わせて調整）
     public static float FieldStartX = 0f;//水平に並べたときのlane0側の端のx座標
     public static int SideLaneCount = 8;//左右それぞれの傾斜レーンの本数
-    public static float SlopeAngle = 45f;//傾斜レーンが真ん中のレーンとなす角度（度）
+    [SerializeField]
+    public static float SlopeAngle = 60f;//傾斜レーンが真ん中のレーンとなす角度（度）
 
     public static float LaneWidth => FieldWidth / InputManager.LaneCount;
     //=>は「読むたびに右辺を計算し直すプロパティ」（ポインタではなく、中身は計算する関数）。
