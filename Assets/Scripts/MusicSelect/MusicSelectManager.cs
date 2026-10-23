@@ -49,8 +49,12 @@ public class MusicSelectManager : MonoBehaviour
     public float holdRepeatInterval = 0.12f;//長押し中の連続移動の間隔
     public float switchInterval = 0.2f;//難易度・ソート切り替え、画面の切り替えの最短間隔
     public float startInputLock = 0.5f;//シーン開始直後に入力を受け付けない時間（前の画面からの押しっぱなし対策）
-    public float decideDelay = 0.6f;//STARTしてからプレイ画面に移るまでの時間
     public float sortPopupDuration = 2.5f;//ソートのポップアップを最後の操作から何秒出しておくか
+
+    [Header("楽曲紹介画面(秒)")]
+    public float introFadeIn = 0.4f;//紹介画面が出てくるまで
+    public float introHold = 3f;//紹介画面を表示しておく時間
+    public float introFadeOut = 1f;//暗転してプレイ画面に移るまで
 
     enum Phase { SelectSong, Confirm, Settings }
 
@@ -133,7 +137,7 @@ public class MusicSelectManager : MonoBehaviour
             {
                 StartGame();//時間切れになったら選んでいる曲でスタート
             }
-            else if (Time.time >= inputLockUntil)
+            else if (Time.time >= inputLockUntil && !view.IsTransitioning)//画面切り替えのアニメーション中は操作できない
             {
                 switch (phase)
                 {
@@ -267,33 +271,40 @@ public class MusicSelectManager : MonoBehaviour
     // ===== 画面の切り替え =====
     void EnterConfirm(int focus)
     {
-        if (phase == Phase.SelectSong)
+        //楽曲選択から来たときは進む向き、設定から戻ってきたときは戻る向きのアニメーションにする
+        bool forward = phase == Phase.SelectSong;
+        if (forward)
         {
             songPosition = position;
             chosenSong = SelectedSong();
         }
         CloseSortPopup();
-        SetPhase(Phase.Confirm, focus);
+        SetPhase(Phase.Confirm, focus, forward);
     }
 
     void BackToSelectSong()
     {
-        SetPhase(Phase.SelectSong, songPosition);
+        SetPhase(Phase.SelectSong, songPosition, false);
     }
 
     void EnterSettings()
     {
-        SetPhase(Phase.Settings, 0);
+        SetPhase(Phase.Settings, 0, true);
     }
 
-    void SetPhase(Phase next, int nextPosition)
+    //アニメーションでカードが消えたところで画面を切り替える
+    void SetPhase(Phase next, int nextPosition, bool forward)
     {
-        phase = next;
-        position = nextPosition;
-        view.Snap(position);
-        RefreshInfo();
+        view.Transition(forward, () =>
+        {
+            phase = next;
+            position = nextPosition;
+            view.Snap(position);
+            RefreshInfo();
+        });
     }
 
+    //楽曲紹介画面を出してからプレイ画面へ
     void StartGame()
     {
         if (started) return;
@@ -304,7 +315,7 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
         CloseSortPopup();
         view.PlayDecide();
-        Invoke(nameof(GoToPlay), decideDelay);
+        view.PlayIntro(song, difficulty, introFadeIn, introHold, introFadeOut, GoToPlay);
     }
 
     void GoToPlay()
@@ -519,18 +530,18 @@ public class MusicSelectManager : MonoBehaviour
         }
     }
 
+    //ランダム選曲カードは灰色の簡素なデザイン
     CardInfo RandomCard()
     {
         return new CardInfo
         {
-            background = Color.Lerp(DifficultyInfo.Colors[difficulty], Color.black, 0.35f),
-            topSmall = DifficultyInfo.Names[difficulty],
-            topLarge = "Lv.?",
-            squareColor = new Color(0.12f, 0.13f, 0.2f),
+            background = new Color(0.68f, 0.68f, 0.68f),
+            squareColor = new Color(0.45f, 0.45f, 0.45f),
+            squareBorder = new Color(0.05f, 0.15f, 0.2f),
             squareText = "?",
             squareTextSize = 200,
             title = "ランダム選曲",
-            subtitle = $"{order.Count}曲からランダムに1曲選びます",
+            titleSize = 48,
         };
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +11,7 @@ public class CardInfo
     public string topSmall = "";//上の小さい文字（難易度名など）
     public string topLarge = "";//上の大きい文字（レベルなど）
     public Color squareColor = Color.gray;//真ん中の正方形（ジャケット）
+    public Color squareBorder = Color.clear;//正方形の枠の色（透明なら枠なし）
     public Sprite squareSprite;
     public string squareText = "";
     public int squareTextSize = 40;
@@ -95,6 +97,10 @@ public class MusicSelectView : MonoBehaviour
     private Image popupHighlight;
     private bool popupVisible;
 
+    private RectTransform cardLayer;
+    private CanvasGroup cardGroup;
+    public bool IsTransitioning { get; private set; }//画面切り替えのアニメーション中
+
     private Func<int, CardInfo> itemAt;
     private float scroll;//表示上の位置。targetに向かってなめらかに動く
     private int target;
@@ -123,8 +129,9 @@ public class MusicSelectView : MonoBehaviour
 
         Stretch(CreateImage("Background", root, new Color(0.05f, 0.06f, 0.12f)).rectTransform);
 
-        var cardLayer = CreateRect("Cards", root);
+        cardLayer = CreateRect("Cards", root);
         Stretch(cardLayer);
+        cardGroup = cardLayer.gameObject.AddComponent<CanvasGroup>();
         for (int i = 0; i < VisibleRange * 2 + 1; i++) cards.Add(new SongCard(this, cardLayer));
         BuildEdgeShade();
 
@@ -220,6 +227,127 @@ public class MusicSelectView : MonoBehaviour
     public void PlayDecide()
     {
         decideFlash = 1f;
+    }
+
+    //画面の切り替えアニメーション。今のカードを横に流して消し、change()で中身を切り替えてから反対側から出す
+    //forward: 先に進むとき（楽曲選択→確定→設定）はtrue、戻るときはfalse
+    public void Transition(bool forward, Action change)
+    {
+        StartCoroutine(TransitionRoutine(forward, change));
+    }
+
+    IEnumerator TransitionRoutine(bool forward, Action change)
+    {
+        const float distance = 160f;
+        float dir = forward ? -1f : 1f;
+        IsTransitioning = true;
+        yield return Animate(0.15f, t =>
+        {
+            float e = t * t;
+            cardGroup.alpha = 1f - t;
+            cardLayer.anchoredPosition = new Vector2(dir * distance * e, 0f);
+            cardLayer.localScale = Vector3.one * Mathf.Lerp(1f, 0.94f, e);
+        });
+        change();
+        yield return Animate(0.25f, t =>
+        {
+            float e = EaseOut(t);
+            cardGroup.alpha = t;
+            cardLayer.anchoredPosition = new Vector2(-dir * distance * (1f - e), 0f);
+            cardLayer.localScale = Vector3.one * Mathf.Lerp(0.94f, 1f, e);
+        });
+        IsTransitioning = false;
+    }
+
+    //楽曲紹介画面。fadeIn秒で出て、hold秒表示し、fadeOut秒で暗転してからonFinishedを呼ぶ
+    public void PlayIntro(SongData song, int difficulty, float fadeIn, float hold, float fadeOut, Action onFinished)
+    {
+        StartCoroutine(IntroRoutine(song, difficulty, fadeIn, hold, fadeOut, onFinished));
+    }
+
+    IEnumerator IntroRoutine(SongData song, int difficulty, float fadeIn, float hold, float fadeOut, Action onFinished)
+    {
+        const float jacketSize = 560f;
+        const float jacketY = 60f;
+        var center = new Vector2(0.5f, 0.5f);
+
+        var intro = CreateRect("Intro", root);//rootの最後に追加するので、ヘッダーなども含めて一番手前に描かれる
+        Stretch(intro);
+        var group = intro.gameObject.AddComponent<CanvasGroup>();
+        group.alpha = 0f;
+        //背景は単色。難易度の色を少しだけ混ぜる
+        Stretch(CreateImage("Background", intro, Color.Lerp(new Color(0.42f, 0.43f, 0.48f), DifficultyInfo.Colors[difficulty], 0.2f)).rectTransform);
+
+        var content = CreateRect("Content", intro);
+        Stretch(content);
+
+        //ジャケット（右下にずらした影つき）
+        var shadow = CreateImage("JacketShadow", content, new Color(0.65f, 0.8f, 0.9f, 0.45f)).rectTransform;
+        Place(shadow, center, center, center, new Vector2(28f, jacketY - 28f), new Vector2(jacketSize, jacketSize));
+        CardInfo card = CardInfo.FromSong(song, difficulty);
+        var jacket = CreateImage("Jacket", content, card.squareColor, card.squareSprite);
+        Place(jacket.rectTransform, center, center, center, new Vector2(0f, jacketY), new Vector2(jacketSize, jacketSize));
+        var jacketText = CreateText("JacketText", jacket.rectTransform, card.squareText, 48, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Stretch(jacketText.rectTransform);
+
+        //ジャケットの下に曲名
+        var title = CreateText("Title", content, song.title, 88, TextAnchor.MiddleCenter);
+        Place(title.rectTransform, center, center, center, new Vector2(0f, jacketY - jacketSize / 2f - 90f), new Vector2(1500f, 120f));
+        FitOneLine(title);
+        AddShadow(title);
+
+        //ジャケットの左に作曲者・譜面制作者（右揃え）
+        float infoX = -jacketSize / 2f - 30f;
+        BuildIntroInfo(content, "作曲", song.artist, new Vector2(infoX, jacketY + 190f));
+        BuildIntroInfo(content, "譜面制作", song.difficulties[difficulty].designer, new Vector2(infoX, jacketY - 130f));
+
+        var fade = CreateImage("FadeOut", intro, Color.clear);
+        Stretch(fade.rectTransform);
+
+        yield return Animate(fadeIn, t =>
+        {
+            group.alpha = t;
+            content.localScale = Vector3.one * Mathf.Lerp(0.96f, 1f, EaseOut(t));
+        });
+        yield return new WaitForSeconds(hold);
+        yield return Animate(fadeOut, t => fade.color = new Color(0f, 0f, 0f, t));
+        onFinished?.Invoke();
+    }
+
+    void BuildIntroInfo(RectTransform parent, string label, string value, Vector2 rightEdge)
+    {
+        var anchor = new Vector2(0.5f, 0.5f);
+        var labelText = CreateText(label, parent, label, 28, TextAnchor.MiddleRight);
+        labelText.color = new Color(1f, 1f, 1f, 0.85f);
+        Place(labelText.rectTransform, anchor, anchor, new Vector2(1f, 0.5f), rightEdge, new Vector2(700f, 40f));
+        AddShadow(labelText);
+        var valueText = CreateText(label + "Value", parent, value, 46, TextAnchor.MiddleRight);
+        Place(valueText.rectTransform, anchor, anchor, new Vector2(1f, 0.5f), rightEdge + new Vector2(0f, -46f), new Vector2(700f, 56f));
+        FitOneLine(valueText);
+        AddShadow(valueText);
+    }
+
+    static void AddShadow(Text text)
+    {
+        var shadow = text.gameObject.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
+        shadow.effectDistance = new Vector2(2f, -2f);
+    }
+
+    //duration秒かけてstep(0→1)を呼び続ける
+    static IEnumerator Animate(float duration, Action<float> step)
+    {
+        for (float time = 0f; time < duration; time += Time.deltaTime)
+        {
+            step(time / duration);
+            yield return null;
+        }
+        step(1f);
+    }
+
+    static float EaseOut(float t)
+    {
+        return 1f - (1f - t) * (1f - t);
     }
 
     // ===== 毎フレームの更新 =====
@@ -577,7 +705,7 @@ public class MusicSelectView : MonoBehaviour
         public int assignedPosition = int.MinValue;//今表示している位置
         public float distance;//中央から何枚ぶん離れているか（描画順に使う）
 
-        private readonly Image background, square;
+        private readonly Image background, squareBorder, square;
         private readonly Text topSmall, topLarge, squareText, title, subtitle, rank, highScore;
         private readonly CanvasGroup detail;//選択中のカードだけに出す情報（ランク・ハイスコア）
 
@@ -596,6 +724,9 @@ public class MusicSelectView : MonoBehaviour
             PlaceTop(topLarge.rectTransform, 46f, new Vector2(inner, 60f));
             FitOneLine(topLarge);
 
+            const float border = 4f;
+            squareBorder = view.CreateImage("SquareBorder", rect, Color.clear);
+            PlaceTop(squareBorder.rectTransform, 112f - border, new Vector2(JacketSize + border * 2f, JacketSize + border * 2f));
             square = view.CreateImage("Square", rect, Color.gray);
             PlaceTop(square.rectTransform, 112f, new Vector2(JacketSize, JacketSize));
             squareText = view.CreateText("SquareText", square.rectTransform, "", 40, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -628,6 +759,7 @@ public class MusicSelectView : MonoBehaviour
             topLarge.text = info.topLarge;
             square.sprite = info.squareSprite;
             square.color = info.squareColor;
+            squareBorder.color = info.squareBorder;
             squareText.text = info.squareText;
             squareText.fontSize = info.squareTextSize;
             squareText.color = info.squareSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.8f);
@@ -649,14 +781,14 @@ public class MusicSelectView : MonoBehaviour
         {
             Place(rt, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -top), size);
         }
+    }
 
-        //改行せず1行に収める。枠に収まらない長さなら文字を小さくする
-        static void FitOneLine(Text text)
-        {
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.resizeTextForBestFit = true;
-            text.resizeTextMinSize = 8;
-            text.resizeTextMaxSize = text.fontSize;
-        }
+    //改行せず1行に収める。枠に収まらない長さなら文字を小さくする
+    static void FitOneLine(Text text)
+    {
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 8;
+        text.resizeTextMaxSize = text.fontSize;
     }
 }

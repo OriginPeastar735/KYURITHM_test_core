@@ -19,6 +19,7 @@ public class DifficultyData
 {
     public int level;
     public string chartName;//Resources内の譜面jsonの名前
+    public string designer;//譜面制作者
     public int highScore;//プレイ状況.jsonができたらそこから読み込む。0なら未プレイ
 }
 
@@ -64,6 +65,8 @@ public static class PlaceholderSongs
         return songs;
     }
 
+    static readonly string[] designers = { "仮譜面師A", "仮譜面師B", "KYU-Charts", "Placeholder Team" };
+
     static void Add(List<SongData> songs, string title, string artist, float bpm, params int[] levels)
     {
         var song = new SongData { id = songs.Count, title = title, artist = artist, bpm = bpm };
@@ -72,8 +75,9 @@ public static class PlaceholderSongs
         foreach (int level in levels)
         {
             int highScore = random.NextDouble() < 0.3 ? 0 : random.Next(700000, 1010001);
+            string designer = designers[random.Next(designers.Length)];
             //譜面はまだ1つしかないので、すべてtest1013を仮で割り当てる
-            song.difficulties.Add(new DifficultyData { level = level, chartName = "test1013", highScore = highScore });
+            song.difficulties.Add(new DifficultyData { level = level, chartName = "test1013", designer = designer, highScore = highScore });
         }
         songs.Add(song);
     }
