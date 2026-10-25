@@ -8,7 +8,8 @@ public static class PlaySession
     // MusicSelect → Play
     public static int MusicIndex;
     public static int Difficulty;
-    public static string ChartName;//空ならPlay側でデフォルト譜面を使う
+    public static string ChartName;//空ならPlay側でデフォルト譜面を使う（読み方はSongLibrary.ReadChart）
+    public static string AudioPath;//音源のファイルパス。空ならPlayシーンに設定してある曲を使う
     public static bool WaitingForIntro;//楽曲紹介の表示中。trueの間はプレイ画面の曲を再生しない
 
     // プレイ設定（選曲画面の設定カードで変更し、プレイ画面のNoteManager・MusicManager・GameManagerで使う）

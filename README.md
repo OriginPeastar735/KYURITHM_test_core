@@ -83,17 +83,35 @@ PARALLEL / INTERPLAY / ELUSIVE の3種類。ELUSIVEは一部の楽曲のみ。
 - `meta`：楽曲名・作曲者・難易度・レベル・譜面制作者・音源ファイル名・BPM・オフセットなど
 - `notes`：ノーツの配列。位置は `lane`（0〜31）と `width`（レーン数）、時間は `tick`（1小節 = 1920tick、1拍 = 480tick）
 
+## 曲データの置き方
+
+曲データ（譜面・音源・ジャケット）はGoogle Driveで管理していて、**gitには入れない**。Driveから1曲ずつフォルダごと次の場所にコピーする。
+
+```
+Assets/StreamingAssets/Songs/<曲フォルダ>/
+    譜面JSON（譜面エディタの出力そのまま。難易度ごとに1つ。ファイル名は自由）
+    音源ファイル（譜面の meta.audioFileName と同じ名前）
+    jacket.png（jacket.jpg でもよい。無ければフォルダ内の最初の画像を使う）
+```
+
+- 曲名・作曲者・難易度・レベル・譜面制作者は譜面の `meta` から読むので、曲の情報を書いたファイルは別に作らない
+- 難易度は PARALLEL → INTERPLAY → ELUSIVE の順に、低い方から欠けずにそろっている必要がある
+- `Songs` に曲が1つも無いときは、選曲画面に仮の曲が表示される（譜面は `Resources/test1013.json`）
+- 読み込めない譜面や足りないファイルがあると、Consoleに警告が出る
+
 ## フォルダ構成
 
 ```
 Assets/
   Scenes/            Opening, MusicSelect, Play, Result
   Scripts/
-    Core/            シーン切り替え(SceneLoader)、シーン間のデータ受け渡し(PlaySession)
+    Core/            シーン切り替え(SceneLoader)、シーン間のデータ受け渡し(PlaySession)、曲の読み込み(SongLibrary)
     GamePlay/        ノーツ・判定・入力・レーン・リザルト
     MusicSelect/     選曲画面（UIはMusicSelectViewがコードで生成）、楽曲紹介画面
     Opening/         タイトル画面
-  Resources/         譜面JSON
+  StreamingAssets/
+    Songs/           曲データ（gitには入れない）
+  Resources/         テスト用の譜面JSON
   Prefab/            ノーツ・レーンのプレハブ
 ```
 

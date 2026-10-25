@@ -110,7 +110,13 @@ public class MusicSelectManager : MonoBehaviour
             input.SetSource(InputSource.Controller);
         }
 
-        songs = PlaceholderSongs.Create();
+        //StreamingAssets/Songs の曲を読む。1曲も無ければ（曲データをまだ置いていない環境など）仮の曲を表示する
+        songs = SongLibrary.LoadAll();
+        if (songs.Count == 0)
+        {
+            Debug.Log("StreamingAssets/Songs に曲が無いので、仮の曲を表示します");
+            songs = PlaceholderSongs.Create();
+        }
         foreach (var song in songs) maxDifficulty = Mathf.Max(maxDifficulty, song.difficulties.Count - 1);
         ApplySort();
         settings = CreateSettings();
@@ -314,6 +320,7 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.MusicIndex = song.id;
         PlaySession.Difficulty = difficulty;
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
+        PlaySession.AudioPath = song.audioPath;
         CloseSortPopup();
         view.PlayDecide();
         //紹介画面を出している間にプレイ画面を読み込み、そのままプレイ画面へ移る

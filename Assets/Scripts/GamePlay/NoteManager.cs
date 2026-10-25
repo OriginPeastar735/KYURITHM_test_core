@@ -111,8 +111,8 @@ public class NoteManager : MonoBehaviour
 
     public void LoadJson(string fileName)
     {
-        TextAsset jsonFile = Resources.Load<TextAsset>(fileName);
-        NotesData notesData = JsonConvert.DeserializeObject<NotesData>(jsonFile.text);
+        //StreamingAssets/Songs の譜面（選曲画面から来たとき）か、Resourcesのデフォルト譜面を読む
+        NotesData notesData = JsonConvert.DeserializeObject<NotesData>(SongLibrary.ReadChart(fileName));
 
         //判定回数の合計。各Create関数でノーツの判定数を加算していく
         totalCombo = 0;

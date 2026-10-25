@@ -26,7 +26,7 @@ public class CardInfo
     public static CardInfo FromSong(SongData song, int difficulty)
     {
         DifficultyData diff = song.difficulties[difficulty];
-        Sprite sprite = string.IsNullOrEmpty(song.jacketPath) ? null : Resources.Load<Sprite>(song.jacketPath);
+        Sprite sprite = SongLibrary.LoadJacket(song.jacketPath);
         return new CardInfo
         {
             background = DifficultyInfo.Colors[difficulty],

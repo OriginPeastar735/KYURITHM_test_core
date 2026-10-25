@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-//1曲分の情報。将来は楽曲メタデータ.jsonから読み込む想定（フィールド名はjsonのキーに合わせて変えてよい）
+//1曲分の情報。StreamingAssets/Songs の譜面jsonのmetaからSongLibraryが作る
 [Serializable]
 public class SongData
 {
@@ -10,7 +10,8 @@ public class SongData
     public string title;
     public string artist;
     public float bpm;
-    public string jacketPath;//Resources内のジャケット画像のパス。空なら仮のジャケットを表示
+    public string jacketPath;//ジャケット画像のファイルパス。空なら仮のジャケットを表示
+    public string audioPath;//音源のファイルパス。空ならプレイ画面に設定してある曲を使う
     public List<DifficultyData> difficulties = new List<DifficultyData>();//基本2種類、一部の曲のみ3種類（リストの順番が難易度の番号）
 }
 
@@ -18,7 +19,7 @@ public class SongData
 public class DifficultyData
 {
     public int level;
-    public string chartName;//Resources内の譜面jsonの名前
+    public string chartName;//譜面。StreamingAssetsからの相対パス（.json）か、Resources内の名前（仮の曲用）
     public string designer;//譜面制作者
     public int highScore;//プレイ状況.jsonができたらそこから読み込む。0なら未プレイ
 }
@@ -35,7 +36,7 @@ public static class DifficultyInfo
     };
 }
 
-//楽曲メタデータができるまでの仮の曲リスト
+//StreamingAssets/Songs に曲が1つも無いときに表示する仮の曲リスト
 public static class PlaceholderSongs
 {
     public static List<SongData> Create()

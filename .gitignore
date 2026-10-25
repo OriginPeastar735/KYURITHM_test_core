@@ -97,3 +97,8 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# 曲データ（譜面json・音源・ジャケット）はGoogle Driveで管理するので、gitには入れない
+# StreamingAssets/Songs/<曲フォルダ>/ にDriveからコピーして使う
+/[Aa]ssets/StreamingAssets/Songs/*
+!/[Aa]ssets/StreamingAssets/Songs/.gitkeep
