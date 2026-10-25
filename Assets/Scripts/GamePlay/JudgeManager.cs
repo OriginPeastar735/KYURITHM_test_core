@@ -195,7 +195,8 @@ public class JudgeManager : MonoBehaviour
             ln.nextCheckpoint++;
         }
 
-        if (ln.nextCheckpoint >= ln.checkpointTimes.Count) ln.Finish();
+        //分岐の終点が親の中間ノーツにつながる場合は最後に判定点がないので、終点の時刻まで待ってから消す
+        if (ln.nextCheckpoint >= ln.checkpointTimes.Count && currentPlayTime >= ln.endExpectedTime) ln.Finish();
     }
 
     //触れている間だけエフェクトを出す（位置はLongNote.UpdatePositionで追従）

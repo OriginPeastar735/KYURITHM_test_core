@@ -41,7 +41,7 @@ public class LongNote : MonoBehaviour
     public int curveSegments = 16;//曲線の帯を何分割して描くか（多いほど滑らか）
 
     [Header("Section")]
-    public bool isFirstSection = true;//slideの最初のセクションか（始点をタップで判定する）
+    public bool isFirstSection = true;//slideの最初のセクションか（始点をタップで判定する）。分岐の接続点から始まる場合はfalse
     public bool isLastSection = true;//slideの最後のセクションか
 
     [HideInInspector] public List<float> checkpointTimes = new List<float>();//slide中の判定点の時刻
@@ -82,7 +82,7 @@ public class LongNote : MonoBehaviour
 
     public void Init(float startBar, float endBar, float startExpectedTime, float endExpectedTime,
                      int startLane, int startWidth, int endLane, int endWidth,
-                     bool isFirstSection, bool isLastSection, List<float> checkpointTimes, SlideCurve curve)
+                     bool isFirstSection, bool isLastSection, bool showEndNote, List<float> checkpointTimes, SlideCurve curve)
     {
         //各変数の代入
         this.curve = curve;
@@ -104,6 +104,8 @@ public class LongNote : MonoBehaviour
 
         //2つ目以降のセクションの始点は前のセクションの終点と重なるので表示しない
         if (!isFirstSection && StartNote != null) StartNote.gameObject.SetActive(false);
+        //分岐の終点が親の中間ノーツにつながる場合は、親の中間ノーツが表示されるので表示しない
+        if (!showEndNote && EndNote != null) EndNote.gameObject.SetActive(false);
 
         //直線なら1区間、曲線なら分割して帯を描く
         if (bodyMesh != null) SetupBodyMesh(curve == SlideCurve.Linear ? 1 : Mathf.Max(1, curveSegments));
@@ -121,6 +123,7 @@ public class LongNote : MonoBehaviour
     }
 
     //進み具合t(0〜1)を、曲線の種類に応じた移動の割合(0〜1)に変換する
+    //譜面エディタの描画・判定も同じ式に合わせている
     private float Ease(float t)
     {
         switch (curve)

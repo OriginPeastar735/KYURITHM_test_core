@@ -20,20 +20,37 @@ public class NoteManager : MonoBehaviour
 
     private float startTime;
 
-    private float barMillis;
+    private float barMillis;//基本BPMでの1小節の秒数。ノーツは時刻をこの小節数に直して流すので、BPMが変わっても流れる速さは一定
     public int destroyedNotesCount = 0;
     public float barPertick = 1920f;
-    public int slideCheckpointTick = 240;//slide中の判定点の間隔(tick)。1920で1小節なので240は8分音符ごと
+
+    //BPM変更線を含めたBPMの変化（tick順）。0tickには基本BPMが入る
+    private readonly List<BpmChange> bpmTimeline = new List<BpmChange>();
+
+    private struct BpmChange
+    {
+        public float tick;
+        public float bpm;
+    }
 
     //ノーツ情報
+    //tickはエディタのMOVE/QUANTIZEで小数になることがあるのでfloatで読む
     [System.Serializable]
     public class NoteData
     {
         public string type;
         public int lane;
         public int width;
-        public int tick;
+        public float tick;
+        public float bpm;//BPM変更線の値
         public List<SlideSection> sections; //slideフォーマット対応のためのlist
+
+        //slideの分岐。親slideの中間ノーツ(parentMidId)につながっている。
+        //branchTypeが"end"なら始点が、"start"なら終点が親の中間ノーツと同じ位置になる
+        //idはエディタ上で数値にも文字列にもなるのでobjectで受け取る
+        public object parentId;
+        public object parentMidId;
+        public string branchType;
     }
 
     //slideのjsonフォーマットを認識するためのクラス
@@ -52,7 +69,7 @@ public class NoteManager : MonoBehaviour
     {
         public int lane;
         public int width;
-        public int tick;
+        public float tick;
     }
 
     //譜面の"meta"部分
@@ -61,7 +78,8 @@ public class NoteManager : MonoBehaviour
     {
         public string title;
         public float bpm;
-        public float offset;
+        public float offset;//ms。正の値だとノーツが曲に対して遅れて来る
+        public int? totalNotes;//エディタで数えた総ノーツ数（読み込み時の確認に使う）
     }
 
     [System.Serializable]
@@ -86,8 +104,7 @@ public class NoteManager : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        startTime = 0f;//後で変更
-        //bpmはLoadJsonで譜面から設定する（Startの実行順によっては上書きしてしまうため、ここでは設定しない）
+        //bpmとstartTime(譜面オフセット)はLoadJsonで譜面から設定する（Startの実行順によっては上書きしてしまうため、ここでは設定しない）
     }
 
     public void LoadJson(string fileName)
@@ -106,6 +123,11 @@ public class NoteManager : MonoBehaviour
         }
         barMillis = (60f / bpm) * 4f;//1小節あたりの時間(秒)
 
+        //譜面のオフセット(ms)だけ、ノーツの時刻を曲に対してずらす（エディタの再生と同じ扱い）
+        startTime = notesData.meta != null ? notesData.meta.offset / 1000f : 0f;
+
+        BuildBpmTimeline(notesData.notes);
+
         foreach (var note in notesData.notes)
         {
             if (note.type == "tap")
@@ -113,17 +135,75 @@ public class NoteManager : MonoBehaviour
             if (note.type == "hold")
                 CreateHoldNote(note.tick, note.lane, note.width, note.type);
             if (note.type == "slide")
-                CreateSlide(note.sections);
+                CreateSlide(note);
         }
 
         Debug.Log($"Notes:{totalCombo}");
+        //エディタと数え方がずれていると、スコアの理論値が101万点にならない
+        if (notesData.meta != null && notesData.meta.totalNotes.HasValue && notesData.meta.totalNotes.Value != totalCombo)
+        {
+            Debug.LogWarning($"{fileName}: 総ノーツ数がエディタの値({notesData.meta.totalNotes.Value})と一致しません。古いエディタで出力した譜面の可能性があります");
+        }
+    }
+
+    //基本BPMとBPM変更線からBPMの変化を作る（同じtickに複数ある場合は後のものを使う）
+    private void BuildBpmTimeline(List<NoteData> notes)
+    {
+        var bpmByTick = new SortedDictionary<float, float> { [0f] = bpm };
+        foreach (var note in notes)
+        {
+            if (note.type == "bpm" && note.bpm > 0) bpmByTick[note.tick] = note.bpm;
+        }
+
+        bpmTimeline.Clear();
+        foreach (var pair in bpmByTick)
+        {
+            bpmTimeline.Add(new BpmChange { tick = pair.Key, bpm = pair.Value });
+        }
+    }
+
+    //tickの位置が曲の何秒目か（BPM変更線ごとに区間を分けて計算する）
+    //1小節(1920tick)が4拍なので、1秒あたりのtick数は BPM × 8
+    private float TickToTime(float tick)
+    {
+        if (tick <= 0) return 0f;
+        float time = 0f;
+        for (int i = 0; i < bpmTimeline.Count; i++)
+        {
+            float ticksPerSec = bpmTimeline[i].bpm * 8f;
+            bool isLast = i == bpmTimeline.Count - 1;
+            if (isLast || tick <= bpmTimeline[i + 1].tick)
+            {
+                return time + (tick - bpmTimeline[i].tick) / ticksPerSec;
+            }
+            time += (bpmTimeline[i + 1].tick - bpmTimeline[i].tick) / ticksPerSec;
+        }
+        return time;
+    }
+
+    private float BpmAtTick(float tick)
+    {
+        float result = bpmTimeline[0].bpm;
+        for (int i = 0; i < bpmTimeline.Count && bpmTimeline[i].tick <= tick; i++)
+        {
+            result = bpmTimeline[i].bpm;
+        }
+        return result;
+    }
+
+    //slideの一定間隔判定の間隔(tick)。BPM120未満は16分、240未満は8分、それ以上は4分
+    private float SlideJudgeInterval(float bpm)
+    {
+        if (bpm < 120f) return barPertick / 16f;
+        if (bpm < 240f) return barPertick / 8f;
+        return barPertick / 4f;
     }
 
 
-    private void CreateNote(int tick, int lane, int width, string type)
+    private void CreateNote(float tick, int lane, int width, string type)
     {
-        float bar = CulcBar(tick);//1920tickで1小節
-        float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
+        float expectedTime = ExpectedTime(tick);//各ノーツの理想タイミング
+        float bar = DisplayBar(expectedTime);
 
         GameObject obj = Instantiate(NotePrefab);
         Note note = obj.GetComponent<Note>();
@@ -137,10 +217,10 @@ public class NoteManager : MonoBehaviour
         notes.Add(note);
     }
 
-    private void CreateHoldNote(int tick, int lane, int width, string type)
+    private void CreateHoldNote(float tick, int lane, int width, string type)
     {
-        float bar = CulcBar(tick);//1920tickで1小節
-        float expectedTime = ExpectedTime(bar);//各ノーツの理想タイミング
+        float expectedTime = ExpectedTime(tick);//各ノーツの理想タイミング
+        float bar = DisplayBar(expectedTime);
 
         GameObject obj = Instantiate(HoldPrefab);
         Hold hold = obj.GetComponent<Hold>();
@@ -155,25 +235,33 @@ public class NoteManager : MonoBehaviour
     }
 
     //slideはセクションごとに1つのLongNoteとして生成する
-    private void CreateSlide(List<SlideSection> sections)
+    //ノーツ数 = 始点 + 中間 + 一定間隔判定 + 終点（エディタのSPEC SLIDEと同じ数え方）
+    private void CreateSlide(NoteData note)
     {
-        totalCombo += 1;//始点のタップ判定
+        var sections = note.sections;
+        if (sections == null || sections.Count == 0) return;
+
+        //分岐の接続点は親slideの中間ノーツとして判定するので、こちらでは判定も表示もしない
+        bool isBranch = note.parentId != null && note.parentMidId != null;
+        bool startIsShared = isBranch && note.branchType == "end";
+        bool endIsShared = isBranch && note.branchType == "start";
+
+        if (!startIsShared) totalCombo += 1;//始点のタップ判定
         for (int i = 0; i < sections.Count; i++)
         {
             var section = sections[i];
-            float startBar = CulcBar(section.from.tick);
-            float endBar = CulcBar(section.to.tick);
-            float startExpectedTime = ExpectedTime(startBar);
-            float endExpectedTime = ExpectedTime(endBar);
-            List<float> checkpointTimes = SlideCheckpointTimes(section.from.tick, section.to.tick);
+            bool isLast = i == sections.Count - 1;
+            float startExpectedTime = ExpectedTime(section.from.tick);
+            float endExpectedTime = ExpectedTime(section.to.tick);
+            List<float> checkpointTimes = SlideCheckpointTimes(section.from.tick, section.to.tick, !(isLast && endIsShared));
 
             GameObject obj = Instantiate(LongNotePrefab);
             LongNote longNote = obj.GetComponent<LongNote>();
             longNote.scrollSpeed = scrollSpeed;
 
-            longNote.Init(startBar, endBar, startExpectedTime, endExpectedTime,
+            longNote.Init(DisplayBar(startExpectedTime), DisplayBar(endExpectedTime), startExpectedTime, endExpectedTime,
                           section.from.lane, section.from.width, section.to.lane, section.to.width,
-                          i == 0, i == sections.Count - 1, checkpointTimes,
+                          i == 0 && !startIsShared, isLast, !(isLast && endIsShared), checkpointTimes,
                           LongNote.ParseCurve(section.curve));
 
             LongNotes.Add(longNote);
@@ -181,31 +269,29 @@ public class NoteManager : MonoBehaviour
         }
     }
 
-    //slide中の判定点の時刻。始点の後からslideCheckpointTickごとに置き、終点にも必ず置く
-    private List<float> SlideCheckpointTimes(int startTick, int endTick)
+    //セクション中の判定点の時刻。始点(または中間)から一定間隔で置き、終点(または次の中間)にも置く
+    //間隔は判定点ごとにその位置のBPMで決めるので、途中でBPMが変わると次の判定から間隔が変わる
+    private List<float> SlideCheckpointTimes(float startTick, float endTick, bool includeEnd)
     {
         var times = new List<float>();
-        if (slideCheckpointTick > 0)
+        for (float tick = startTick + SlideJudgeInterval(BpmAtTick(startTick)); tick < endTick - 1e-3f; tick += SlideJudgeInterval(BpmAtTick(tick)))
         {
-            for (int tick = startTick + slideCheckpointTick; tick < endTick; tick += slideCheckpointTick)
-            {
-                times.Add(ExpectedTime(CulcBar(tick)));
-            }
+            times.Add(ExpectedTime(tick));
         }
-        times.Add(ExpectedTime(CulcBar(endTick)));
+        if (includeEnd) times.Add(ExpectedTime(endTick));
         return times;
     }
 
-    // ノーツの理想タイミングを計算する関数
-    private float ExpectedTime(float bar)
+    // ノーツの理想タイミング(秒)を計算する関数
+    private float ExpectedTime(float tick)
     {
-        return startTime + bar * barMillis;
+        return startTime + TickToTime(tick);
     }
 
-    // ノーツの小節位置を計算する関数
-    private float CulcBar(int tick)
+    // ノーツを流す位置（基本BPMでの小節数）。時刻に比例するので、BPM変更があっても一定の速さで流れる
+    private float DisplayBar(float expectedTime)
     {
-        return tick / barPertick;
+        return (expectedTime - startTime) / barMillis;
     }
 
     void Update()
