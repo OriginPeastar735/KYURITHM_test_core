@@ -77,8 +77,8 @@ public static class PlaceholderSongs
         {
             int highScore = random.NextDouble() < 0.3 ? 0 : random.Next(700000, 1010001);
             string designer = designers[random.Next(designers.Length)];
-            //譜面はまだ1つしかないので、すべてtest1013を仮で割り当てる
-            song.difficulties.Add(new DifficultyData { level = level, chartName = "test1013", designer = designer, highScore = highScore });
+            //仮の曲はすべて確認用の譜面test_long（約100秒、全種類のノーツ入り）にする
+            song.difficulties.Add(new DifficultyData { level = level, chartName = "test_long", designer = designer, highScore = highScore });
         }
         songs.Add(song);
     }

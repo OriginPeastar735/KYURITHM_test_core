@@ -96,7 +96,7 @@ Assets/StreamingAssets/Songs/<曲フォルダ>/
 
 - 曲名・作曲者・難易度・レベル・譜面制作者は譜面の `meta` から読むので、曲の情報を書いたファイルは別に作らない
 - 難易度は PARALLEL → INTERPLAY → ELUSIVE の順に、低い方から欠けずにそろっている必要がある
-- `Songs` に曲が1つも無いときは、選曲画面に仮の曲が表示される（譜面は `Resources/test1013.json`）
+- `Songs` に曲が1つも無いときは、選曲画面に仮の曲が表示される（譜面は確認用の `Resources/test_long.json`）
 - 読み込めない譜面や足りないファイルがあると、Consoleに警告が出る
 
 ## フォルダ構成

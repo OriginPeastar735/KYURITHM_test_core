@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
-    const string DefaultChartName = "test1013";//Playシーン単体で起動したときに使う譜面
+    const string DefaultChartName = "test_long";//Playシーン単体で起動したときに使う確認用の譜面（約100秒、全種類のノーツ入り）
 
     public int[] PlayResult = new int[7];//(score, combo, maxCombo, precisePlus, precise, approx, miss)
     public float playScore = 0;
