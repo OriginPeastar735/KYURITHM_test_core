@@ -1,5 +1,5 @@
-//Holdノーツ: レールを押しっぱなしでも判定ライン通過時にPRECISE+として処理される。
-//判定ラインを過ぎてから判定幅(Good)以内に一度も押されなければMissになる。
+//Holdノーツ: レーンを押しっぱなしでも判定ライン通過時にPRECISE+として処理される。
+//判定ラインを過ぎてから判定幅(MISS)以内に一度も押されなければMISSになる。
 
 using System.Collections;
 using System.Collections.Generic;

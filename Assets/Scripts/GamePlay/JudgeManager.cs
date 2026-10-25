@@ -19,11 +19,6 @@ public class JudgeManager : MonoBehaviour
     public static event Action Approx;
     public static event Action Miss;
 
-    //以前の音ゲーの演出用（RailBaseManager/MusicManagerが購読しているため残している）
-    public static event Action DRailMove;
-    public static event Action KRailMove;
-    public static event Action PlayIsoSound;
-
     //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
     public float precisePlusMs = 30f;

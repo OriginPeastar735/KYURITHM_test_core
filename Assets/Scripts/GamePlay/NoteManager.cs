@@ -1,6 +1,3 @@
-//KYURITHM用にjsonファイル読み込みロジックを変更しています
-
-
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,13 +10,7 @@ public class NoteManager : MonoBehaviour
     public static NoteManager instance;
     public GameObject NotePrefab;//Unity上でNoteプレハブを設定
     public GameObject HoldPrefab;//Unity上で黄色のholdプレハブを作成し割り当て
-    public GameObject IsoNotePrefab;
     public GameObject LongNotePrefab;
-
-    public Transform DRailBase;
-    public Transform FRailBase;
-    public Transform JRailBase;
-    public Transform KRailBase;
 
     public float bpm;
 
@@ -38,7 +29,6 @@ public class NoteManager : MonoBehaviour
     [System.Serializable]
     public class NoteData
     {
-        public float bar;
         public string type;
         public int lane;
         public int width;
@@ -65,7 +55,7 @@ public class NoteManager : MonoBehaviour
         public int tick;
     }
 
-    //KYURITHMフォーマットの"meta"部分
+    //譜面の"meta"部分
     [Serializable]
     public class MetaData
     {
@@ -78,41 +68,12 @@ public class NoteManager : MonoBehaviour
     public class NotesData
     {
         public MetaData meta;
-        public float bpm;//旧フォーマット（トップレベルにbpm）用
         public List<NoteData> notes;
-        // public List<NoteData> SNotes;
-        // public List<NoteData> DNotes;
-        // public List<NoteData> FNotes;
-        // public List<NoteData> JNotes;
-        // public List<NoteData> KNotes;
-        // public List<NoteData> LNotes;
-        // public List<NoteData> DLongNotes;
-        // public List<NoteData> FLongNotes;
-        // public List<NoteData> JLongNotes;
-        // public List<NoteData> KLongNotes;
     }
 
     public List<Note> notes = new List<Note>();
     public List<Hold> holds = new List<Hold>();
     public List<LongNote> LongNotes = new List<LongNote>();
-    // public List<Note> SNotes = new List<Note>();
-    // public List<Note> DNotes = new List<Note>();
-    // public List<Note> FNotes = new List<Note>();
-    // public List<Note> JNotes = new List<Note>();
-    // public List<Note> KNotes = new List<Note>();
-    // public List<Note> LNotes = new List<Note>();
-    // public List<LongNote> DLongNotes = new List<LongNote>();
-    // public List<LongNote> FLongNotes = new List<LongNote>();
-    // public List<LongNote> JLongNotes = new List<LongNote>();
-    // public List<LongNote> KLongNotes = new List<LongNote>();
-
-    private float[] previousExpectedTime = new float[4];//ロングノーツ描画のための一時変数
-    private float[] previousNoteBar = new float[4];//ロングノーツ描画のための一時変数
-
-    const int D = 0;
-    const int F = 1;
-    const int J = 2;
-    const int K = 3;
 
     void Awake()
     {
@@ -137,20 +98,13 @@ public class NoteManager : MonoBehaviour
         //判定回数の合計。各Create関数でノーツの判定数を加算していく
         totalCombo = 0;
 
-        //KYURITHMフォーマットはmeta内、旧フォーマットはトップレベルのbpmを使う
-        bpm = notesData.meta != null ? notesData.meta.bpm : notesData.bpm;
+        bpm = notesData.meta != null ? notesData.meta.bpm : 0f;
         if (bpm <= 0)
         {
             Debug.LogError($"{fileName}: bpmが読み込めませんでした");
             bpm = 120f;
         }
         barMillis = (60f / bpm) * 4f;//1小節あたりの時間(秒)
-
-        //holdノートに使えるかも
-        // foreach (var note in notesData.SNotes)
-        // {
-        //     CreateIsoNote(note.bar, "S", DRailBase, note.type);
-        // }
 
         foreach (var note in notesData.notes)
         {
@@ -160,22 +114,7 @@ public class NoteManager : MonoBehaviour
                 CreateHoldNote(note.tick, note.lane, note.width, note.type);
             if (note.type == "slide")
                 CreateSlide(note.sections);
-            // CreateSlideNote(note.sections);
         }
-
-        // foreach (var note in notesData.DLongNotes)
-        // {
-        //     float expectedTime = startTime + note.bar * barMillis;
-        //     if (note.type == "s")
-        //     {
-        //         previousExpectedTime[D] = expectedTime;
-        //         previousNoteBar[D] = note.bar;
-        //     }
-        //     else if (note.type == "e")
-        //     {
-        //         CreateLongNote(previousNoteBar[D], note.bar, "D", DRailBase, previousExpectedTime[D], expectedTime);
-        //     }
-        // }
 
         Debug.Log($"Notes:{totalCombo}");
     }
@@ -269,34 +208,6 @@ public class NoteManager : MonoBehaviour
         return tick / barPertick;
     }
 
-
-
-
-    // private void CreateIsoNote(float bar, string railStr, Transform rail, string type)
-    // {
-    //     GameObject obj = Instantiate(IsoNotePrefab, rail);
-    //     Note note = obj.GetComponent<Note>();
-    //     note.scrollSpeed = scrollSpeed;
-
-    //     float expectedTime = startTime + bar * barMillis;//各ノーツの理想タイミング
-
-    //     note.Init(bar, expectedTime);
-    //     //Debug.Log($"{rail.name} worldX={rail.position.x}");
-
-
-    //     switch (railStr)
-    //     {
-    //         case "S":
-    //             SNotes.Add(note);
-    //             break;
-    //         case "L":
-    //             LNotes.Add(note);
-    //             break;
-    //         default:
-    //             break;
-    //     }
-    //     Notes.Add(note);
-    // }
     void Update()
     {
         float currentTime = MusicManager.instance.CurrentPlayTime;
