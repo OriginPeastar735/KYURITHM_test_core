@@ -11,8 +11,8 @@ public static class PlaySession
     public static string ChartName;//空ならPlay側でデフォルト譜面を使う
     public static bool WaitingForIntro;//楽曲紹介の表示中。trueの間はプレイ画面の曲を再生しない
 
-    // プレイ設定（選曲画面の設定カードで変更する。プレイ画面への反映はまだ）
+    // プレイ設定（選曲画面の設定カードで変更し、プレイ画面のNoteManager・MusicManager・GameManagerで使う）
     public static float HiSpeed = 5f;//ノーツの速さ
-    public static int TimingOffsetMs = 0;//判定タイミングの調整(ms)
+    public static int TimingOffsetMs = 0;//判定タイミングの調整(ms)。+にするとノーツの到着と判定が遅れる
     public static bool ShowFastLate = true;//FAST/LATEを表示するか
 }

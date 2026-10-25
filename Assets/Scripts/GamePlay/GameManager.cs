@@ -22,6 +22,10 @@ public class GameManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI ScoreText;
     [SerializeField] private ResultScreen resultScreen;//全ノーツが消えたらこのパネルを割り込ませてリザルトを出す
     [SerializeField] private GameObject hideOnResult;//リザルトが出ると同時に非アクティブにするもの（プレイ中だけ使うCanvasなど）
+
+    [Header("FAST/LATE表示（選曲画面の設定がONのときだけ、コンボ表示を複製して作る）")]
+    [SerializeField] private Vector2 fastLateOffset = new Vector2(0f, -0.4f);//コンボ表示からの位置
+    [SerializeField] private float fastLateFontSize = 0.25f;
     string ComboStr;
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
 
@@ -35,6 +39,8 @@ public class GameManager : MonoBehaviour
         string chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
         NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
+
+        if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
     }
 
     // Update is called once per frame

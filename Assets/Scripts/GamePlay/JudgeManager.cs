@@ -18,6 +18,8 @@ public class JudgeManager : MonoBehaviour
     public static event Action Precise;
     public static event Action Approx;
     public static event Action Miss;
+    //タイミングで判定するノーツ（tap・slide始点）がPRECISE/APPROXだったときに、ずれ(秒)を通知する。負なら早い(FAST)
+    public static event Action<float> FastLate;
 
     //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
@@ -107,7 +109,7 @@ public class JudgeManager : MonoBehaviour
             {
                 float diff = currentPlayTime - bestNote.expectedTime;
                 Consume(bestNote.lane, bestNote.width);
-                ShowResult(GradeByTiming(diff), bestNote.centerLane, diff);
+                ShowTimingResult(GradeByTiming(diff), bestNote.centerLane, diff);
                 bestNote.Delete();
             }
             else if (bestSlide != null)
@@ -115,7 +117,7 @@ public class JudgeManager : MonoBehaviour
                 float diff = currentPlayTime - bestSlide.startExpectedTime;
                 float centerLane = bestSlide.startLane + bestSlide.startWidth / 2f;
                 Consume(bestSlide.startLane, bestSlide.startWidth);
-                ShowResult(GradeByTiming(diff), centerLane, diff);
+                ShowTimingResult(GradeByTiming(diff), centerLane, diff);
                 bestSlide.Activate();
             }
             else
@@ -257,6 +259,13 @@ public class JudgeManager : MonoBehaviour
         if (ms <= preciseMs) return JudgeResult.Precise;
         if (ms <= approxMs) return JudgeResult.Approx;
         return JudgeResult.Miss;//approxMs〜missMsの範囲で押した場合
+    }
+
+    //押したタイミングで判定した結果を出す。PRECISE+でもMISSでもないときはFAST/LATEも通知する
+    void ShowTimingResult(JudgeResult result, float centerLane, float diffSec)
+    {
+        ShowResult(result, centerLane, diffSec);
+        if (result == JudgeResult.Precise || result == JudgeResult.Approx) FastLate?.Invoke(diffSec);
     }
 
     //判定結果に応じてエフェクトとイベントを発行する（centerLaneはエフェクトを出すレーン位置）

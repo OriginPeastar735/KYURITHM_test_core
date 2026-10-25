@@ -16,7 +16,9 @@ public class NoteManager : MonoBehaviour
 
     public int totalCombo = 0;
 
-    public float scrollSpeed = 200f;
+    [Header("ハイスピード")]
+    public float speedPerHiSpeed = 2f;//ハイスピード1あたり、ノーツが1秒に進む距離（ハイスピード5で10）
+    [System.NonSerialized] public float scrollSpeed;//基本BPMの1小節あたりに進む距離。LoadJsonで選曲画面のハイスピードから計算する
 
     private float startTime;
 
@@ -122,6 +124,8 @@ public class NoteManager : MonoBehaviour
             bpm = 120f;
         }
         barMillis = (60f / bpm) * 4f;//1小節あたりの時間(秒)
+        //1秒に進む距離をハイスピードで決めるので、曲のBPMが違っても同じハイスピードなら同じ速さで流れる
+        scrollSpeed = PlaySession.HiSpeed * speedPerHiSpeed * barMillis;
 
         //譜面のオフセット(ms)だけ、ノーツの時刻を曲に対してずらす（エディタの再生と同じ扱い）
         startTime = notesData.meta != null ? notesData.meta.offset / 1000f : 0f;

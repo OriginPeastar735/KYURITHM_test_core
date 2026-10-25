@@ -11,8 +11,10 @@ public class MusicManager : MonoBehaviour
 
     private double dspStartTime;
     public float startDelay = 1.0f;//曲が始まるまでの待ち秒
-    public float offset = 0.5f;
     private bool isPlaying = false;
+
+    //選曲画面で設定したタイミング調整(秒)。+にするとノーツの到着と判定が遅れる（音が遅れて聞こえる環境向け）
+    private float TimingOffset => PlaySession.TimingOffsetMs / 1000f;
 
     void Awake()
     {
@@ -27,7 +29,7 @@ public class MusicManager : MonoBehaviour
         audioSource = gameObject.GetComponent<AudioSource>();
         audioSource.clip = shiningStar;
         //再生前はノーツを曲が始まるstartDelay秒前の位置に置いておく
-        CurrentPlayTime = offset - startDelay;
+        CurrentPlayTime = -startDelay - TimingOffset;
         //選曲画面の楽曲紹介が出ている間は、紹介が終わるまで再生を待つ
         if (!PlaySession.WaitingForIntro) StartMusic();
     }
@@ -52,7 +54,7 @@ public class MusicManager : MonoBehaviour
 
         //現在のplayTime = 現在のdspTime-再生開始dspTime
         //再生前はマイナスの値になり、再生されると0から始まる
-        CurrentPlayTime = (float)(AudioSettings.dspTime - dspStartTime) + offset; 
+        CurrentPlayTime = (float)(AudioSettings.dspTime - dspStartTime) - TimingOffset;
         //CurrentPlayTime = audioSource.time;
         //Debug.Log(CurrentPlayTime);
     }
