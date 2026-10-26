@@ -7,6 +7,7 @@ using UnityEngine;
 //  1. 最後のノーツから少し待つ（delay秒）
 //  2. パネルを画面外からスライドさせながら表示する（slideIn秒）
 //  3. スコアと判定数を0から数え上げる（countUp秒）
+//  4. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る
 //
 //panelはCanvasの子に置いた画像(Image)。最初は非表示にしておき、GameManagerからShowで呼び出す
 public class ResultScreen : MonoBehaviour
@@ -15,6 +16,8 @@ public class ResultScreen : MonoBehaviour
     [SerializeField] private CanvasGroup group;//panelに付けたCanvasGroup（フェード用）
 
     [Header("表示するテキスト")]
+    [SerializeField] private TextMeshProUGUI titleText;//曲名（譜面jsonのmeta.title）
+    [SerializeField] private TextMeshProUGUI artistText;//アーティスト名（譜面jsonのmeta.artist）
     [SerializeField] private TextMeshProUGUI scoreText;
     [SerializeField] private TextMeshProUGUI maxComboText;
     [SerializeField] private TextMeshProUGUI precisePlusText;
@@ -28,11 +31,21 @@ public class ResultScreen : MonoBehaviour
     public float countUp = 1.0f;
     public Vector2 slideFrom = new Vector2(1920f, 0f);//表示位置からどれだけずらした所から入ってくるか
 
+    //パネルが出始めてからシーンが変わるまでtrue。この間はレーンを光らせない（入力は戻る操作のために読み続ける）
+    public static bool IsShowing { get; private set; }
+
     //SetActive(false)で隠すと、このコンポーネントがpanelやその親に付いていた場合にコルーチンが動かなくなるので、透明にして隠す
     void Awake()
     {
         group.alpha = 0f;
         group.blocksRaycasts = false;
+        IsShowing = false;
+    }
+
+    //staticなのでシーンが変わっても残る。次のプレイで光らなくならないように戻しておく
+    void OnDestroy()
+    {
+        IsShowing = false;
     }
 
     //result: GameManager.PlayResult (score, combo, maxCombo, precisePlus, precise, approx, miss)
@@ -49,7 +62,9 @@ public class ResultScreen : MonoBehaviour
         yield return new WaitForSeconds(delay);
 
         if (hideOnShow != null) hideOnShow.SetActive(false);
+        IsShowing = true;
 
+        SetSongInfo();
         SetCounts(result, 0f);
 
         //2. 画面外から表示位置へスライドさせる
@@ -65,6 +80,25 @@ public class ResultScreen : MonoBehaviour
 
         //3. スコアと判定数を同時に数え上げる
         yield return MusicSelectView.Animate(countUp, t => SetCounts(result, MusicSelectView.EaseOut(t)));
+
+        //4. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
+        while (!BackPressed()) yield return null;
+        SceneLoader.ChangeScene(GameScene.MusicSelect);
+    }
+
+    bool BackPressed()
+    {
+        if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
+        return Input.anyKeyDown;
+    }
+
+    //曲名とアーティスト名はNoteManagerが譜面を読み込んだときにmetaから取っておいたものを使う
+    //テキストをまだアタッチしていない場合は何もしない
+    void SetSongInfo()
+    {
+        if (NoteManager.instance == null) return;
+        if (titleText != null) titleText.text = NoteManager.instance.title;
+        if (artistText != null) artistText.text = NoteManager.instance.artist;
     }
 
     //最終値にrate(0〜1)を掛けた値を表示する

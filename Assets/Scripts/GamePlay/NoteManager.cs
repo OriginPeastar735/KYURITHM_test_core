@@ -13,6 +13,8 @@ public class NoteManager : MonoBehaviour
     public GameObject LongNotePrefab;
 
     public float bpm;
+    [System.NonSerialized] public string title = "";//譜面のmetaの曲名。リザルト画面で表示する
+    [System.NonSerialized] public string artist = "";//譜面のmetaのアーティスト名。リザルト画面で表示する
 
     public int totalCombo = 0;
 
@@ -79,6 +81,7 @@ public class NoteManager : MonoBehaviour
     public class MetaData
     {
         public string title;
+        public string artist;
         public float bpm;
         public float offset;//ms。正の値だとノーツが曲に対して遅れて来る
         public int? totalNotes;//エディタで数えた総ノーツ数（読み込み時の確認に使う）
@@ -116,6 +119,9 @@ public class NoteManager : MonoBehaviour
 
         //判定回数の合計。各Create関数でノーツの判定数を加算していく
         totalCombo = 0;
+
+        title = notesData.meta?.title ?? "";
+        artist = notesData.meta?.artist ?? "";
 
         bpm = notesData.meta != null ? notesData.meta.bpm : 0f;
         if (bpm <= 0)

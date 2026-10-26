@@ -21,7 +21,8 @@ public class railfade : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        bool isPressed = InputManager.instance != null && InputManager.instance.laneHeld[laneIndex];
+        //リザルト表示中は押しても光らせない（光っていたものはそのまま消えていく）
+        bool isPressed = !ResultScreen.IsShowing && InputManager.instance != null && InputManager.instance.laneHeld[laneIndex];
 
         if (isPressed)
         {
