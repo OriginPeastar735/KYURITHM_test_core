@@ -42,6 +42,8 @@ public class JudgeManager : MonoBehaviour
 
     //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
     private readonly bool[] consumed = new bool[InputManager.LaneCount];
+    //このフレームで押されたレーンを押した時刻（曲の再生時間）。tap・slide始点はフレームの時刻ではなくこの時刻で判定する
+    private readonly float[] pressTime = new float[InputManager.LaneCount];
 
     void Awake()
     {
@@ -59,6 +61,10 @@ public class JudgeManager : MonoBehaviour
 
         //Array.Clear(配列, 開始, 個数): 配列を初期値（false）に戻す
         Array.Clear(consumed, 0, consumed.Length);
+        for (int i = 0; i < InputManager.LaneCount; i++)
+        {
+            if (InputManager.instance.laneDown[i]) pressTime[i] = MusicManager.instance.ToPlayTime(InputManager.instance.laneDownTimestamp[i]);
+        }
 
         JudgeTaps();
         JudgeHolds();
@@ -68,6 +74,7 @@ public class JudgeManager : MonoBehaviour
 
     // ===== tap と slide始点 =====
     //押された入力に対して、判定幅内で一番早いノーツから順に判定する
+    //ずれは「押した時刻 - ノーツの時刻」で求めるので、フレームレートに関係なく押したタイミングどおりに判定される
     void JudgeTaps()
     {
         while (true)
@@ -75,22 +82,22 @@ public class JudgeManager : MonoBehaviour
             Note bestNote = null;
             LongNote bestSlide = null;
             float bestTime = float.MaxValue;
+            float bestPressTime = 0f;//候補のノーツを押した時刻
 
             //「今判定できるノーツのうち、一番早いもの」を探す。
-            //3つのifで条件に合わないノーツを飛ばし(continue)、全部通過したものを候補にする。
+            //2つのifで条件に合わないノーツを飛ばし(continue)、全部通過したものを候補にする。
             //bestTimeは最初とても大きい値なので、最初に条件を満たしたノーツが必ず候補になり、
             //その後はより早いノーツが見つかるたびに入れ替わる。ループが終わると一番早いノーツが残る
             foreach (var note in NoteManager.instance.notes)
             {
                 //すでに見つけた候補より遅いノーツは飛ばす
                 if (note == null || note.expectedTime >= bestTime) continue;
-                //判定幅(±MISS)の外にあるノーツは飛ばす
-                if (Mathf.Abs(currentPlayTime - note.expectedTime) > MissWindow) continue;
-                //ノーツの範囲に、まだ使われていない「押した瞬間」の入力がなければ飛ばす
-                if (!HasFreeDown(note.lane, note.width)) continue;
+                //ノーツの範囲に、まだ使われていない「押した瞬間」の入力が判定幅(±MISS)内の時刻になければ飛ばす
+                if (!TryFreeDown(note.lane, note.width, note.expectedTime, out float press)) continue;
                 bestNote = note;
                 bestSlide = null;//候補は常に1つだけにする
                 bestTime = note.expectedTime;//次のノーツと比べるために時刻を記録する
+                bestPressTime = press;
             }
 
             //slideの始点も同じbestTimeと比べるので、tapとslide始点を合わせた中で一番早いものが選ばれる
@@ -98,23 +105,23 @@ public class JudgeManager : MonoBehaviour
             {
                 if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
                 if (ln.startExpectedTime >= bestTime) continue;
-                if (Mathf.Abs(currentPlayTime - ln.startExpectedTime) > MissWindow) continue;
-                if (!HasFreeDown(ln.startLane, ln.startWidth)) continue;
+                if (!TryFreeDown(ln.startLane, ln.startWidth, ln.startExpectedTime, out float press)) continue;
                 bestNote = null;
                 bestSlide = ln;
                 bestTime = ln.startExpectedTime;
+                bestPressTime = press;
             }
 
             if (bestNote != null)
             {
-                float diff = currentPlayTime - bestNote.expectedTime;
+                float diff = bestPressTime - bestNote.expectedTime;
                 Consume(bestNote.lane, bestNote.width);
                 ShowTimingResult(GradeByTiming(diff), bestNote.centerLane, diff);
                 bestNote.Delete();
             }
             else if (bestSlide != null)
             {
-                float diff = currentPlayTime - bestSlide.startExpectedTime;
+                float diff = bestPressTime - bestSlide.startExpectedTime;
                 float centerLane = bestSlide.startLane + bestSlide.startWidth / 2f;
                 Consume(bestSlide.startLane, bestSlide.startWidth);
                 ShowTimingResult(GradeByTiming(diff), centerLane, diff);
@@ -292,16 +299,23 @@ public class JudgeManager : MonoBehaviour
         }
     }
 
-    //範囲内に、まだ使われていない「押した瞬間」の入力があるか
-    bool HasFreeDown(int lane, int width)
+    //範囲内に、まだ使われていない「押した瞬間」の入力が、expectedTimeの判定幅(±MISS)内の時刻にあるか
+    //複数あればexpectedTimeに一番近い時刻をpressに返す
+    bool TryFreeDown(int lane, int width, float expectedTime, out float press)
     {
+        press = 0f;
+        float bestDiff = float.MaxValue;
         int start = Mathf.Max(0, lane);
         int end = Mathf.Min(InputManager.LaneCount, lane + width);
         for (int i = start; i < end; i++)
         {
-            if (InputManager.instance.laneDown[i] && !consumed[i]) return true;
+            if (!InputManager.instance.laneDown[i] || consumed[i]) continue;
+            float diff = Mathf.Abs(pressTime[i] - expectedTime);
+            if (diff > MissWindow || diff >= bestDiff) continue;
+            bestDiff = diff;
+            press = pressTime[i];
         }
-        return false;
+        return bestDiff <= MissWindow;
     }
 
     //範囲内の「押した瞬間」の入力を使用済みにする

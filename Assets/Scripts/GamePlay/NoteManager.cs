@@ -22,6 +22,14 @@ public class NoteManager : MonoBehaviour
     public float speedPerHiSpeed = 2f;//ハイスピード1あたり、ノーツが1秒に進む距離（ハイスピード5で10）
     [System.NonSerialized] public float scrollSpeed;//基本BPMの1小節あたりに進む距離。LoadJsonで選曲画面のハイスピードから計算する
 
+    [Header("ノーツの見た目（長さはノーツの奥行きに対する割合）")]
+    public float cornerRadiusRatio = 0.35f;//角の丸みの半径
+    public bool showCenterLine = false;//ノーツの中心に線を入れるか（今は白いノーツで見えないので切っている）
+    public Color centerLineColor = Color.white;//中心の線の色（slideの中間ノーツには線を入れない）
+    public float centerLineWidthRatio = 0.08f;//中心の線の太さ
+    public float centerLineInsetRatio = 0.7f;//中心の線の端からノーツの端までの長さ
+    private Material centerLineMaterial;//線のマテリアル。最初のノーツのマテリアルを複製して色だけ変える
+
     private float startTime;
 
     private float barMillis;//基本BPMでの1小節の秒数。ノーツは時刻をこの小節数に直して流すので、BPMが変わっても流れる速さは一定
@@ -104,6 +112,28 @@ public class NoteManager : MonoBehaviour
         {
             instance = this;
         }
+    }
+
+    void OnDestroy()
+    {
+        if (centerLineMaterial != null) Destroy(centerLineMaterial);
+    }
+
+    //ノーツの角を丸め、withCenterLineなら中心に線を入れる（SetRangeより前に呼ぶ）
+    public void ApplyNoteStyle(LaneSurfaceShape shape, bool withCenterLine)
+    {
+        if (!withCenterLine || !showCenterLine)
+        {
+            shape.SetStyle(cornerRadiusRatio);
+            return;
+        }
+        if (centerLineMaterial == null)
+        {
+            //ノーツと同じシェーダーのまま色だけ変える（ビルドでシェーダーが含まれないことを防ぐため、新しくシェーダーを探さない）
+            centerLineMaterial = new Material(shape.GetComponent<MeshRenderer>().sharedMaterial) { name = "NoteCenterLine" };
+            centerLineMaterial.color = centerLineColor;
+        }
+        shape.SetStyle(cornerRadiusRatio, centerLineMaterial, centerLineWidthRatio, centerLineInsetRatio);
     }
 
     // Start is called before the first frame update

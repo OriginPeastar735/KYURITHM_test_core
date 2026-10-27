@@ -23,7 +23,9 @@ public class Note : MonoBehaviour
 
         //x,yと傾きはLaneSurfaceShapeが子の板で作るので、自身はz方向に動かすだけ
         //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
-        gameObject.AddComponent<LaneSurfaceShape>().SetRange(lane, width, 0.01f);
+        LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
+        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、中心に線を入れる
+        shape.SetRange(lane, width, 0.01f);
 
         transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
     }

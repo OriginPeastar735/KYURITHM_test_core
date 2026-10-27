@@ -107,6 +107,10 @@ public class LongNote : MonoBehaviour
         //分岐の終点が親の中間ノーツにつながる場合は、親の中間ノーツが表示されるので表示しない
         if (!showEndNote && EndNote != null) EndNote.gameObject.SetActive(false);
 
+        //角を丸める。始点と最後の終点には中心に線を入れ、中間ノーツ（最後以外のセクションの終点）は丸めるだけにする
+        if (startShape != null) NoteManager.instance.ApplyNoteStyle(startShape, true);
+        if (endShape != null) NoteManager.instance.ApplyNoteStyle(endShape, isLastSection);
+
         //直線なら1区間、曲線なら分割して帯を描く
         if (bodyMesh != null) SetupBodyMesh(curve == SlideCurve.Linear ? 1 : Mathf.Max(1, curveSegments));
     }
@@ -183,7 +187,8 @@ public class LongNote : MonoBehaviour
 
         //x,yと傾きはLaneSurfaceShapeが決めるので、ここではz位置だけを設定する
         //0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
-        if(StartNote != null)
+        //押している間は始点を消しているので更新しない（判定ライン上の小数のレーン位置で毎フレーム板を作り直さないように）
+        if(StartNote != null && StartNote.gameObject.activeSelf)
         {
             StartNote.localPosition = new Vector3(0, 0, startZ);
             startShape.SetRange(startLaneF, startWidthF, 0.01f);

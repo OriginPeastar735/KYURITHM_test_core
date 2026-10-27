@@ -135,10 +135,10 @@ public class MusicSelectView : MonoBehaviour
         BuildPopup();
     }
 
-    public void SetPlayer(string playerName, int trackNumber)
+    public void SetPlayer(string playerName, int trackNumber, bool isFinalTrack)
     {
         playerText.text = playerName;
-        trackText.text = $"{trackNumber}曲目";
+        trackText.text = isFinalTrack ? "FINAL TRACK" : $"TRACK {trackNumber}";
     }
 
     public void SetTimer(int seconds)

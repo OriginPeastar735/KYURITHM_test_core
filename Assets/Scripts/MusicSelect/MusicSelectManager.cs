@@ -117,13 +117,14 @@ public class MusicSelectManager : MonoBehaviour
             Debug.Log("StreamingAssets/Songs に曲が無いので、仮の曲を表示します");
             songs = PlaceholderSongs.Create();
         }
+        ApplyHighScores();
         foreach (var song in songs) maxDifficulty = Mathf.Max(maxDifficulty, song.difficulties.Count - 1);
         ApplySort();
         settings = CreateSettings();
 
         view = gameObject.AddComponent<MusicSelectView>();
         view.Build(ItemAt);
-        view.SetPlayer(PlaySession.PlayerName, PlaySession.TrackNumber);
+        view.SetPlayer(PlaySession.PlayerName, PlaySession.TrackNumber, PlaySession.IsFinalTrack);
         RefreshInfo();
         view.Snap(position);
 
@@ -309,6 +310,18 @@ public class MusicSelectManager : MonoBehaviour
             view.Snap(position);
             RefreshInfo();
         });
+    }
+
+    //プレイ画面で記録したハイスコアを曲リストに反映する（記録の無い譜面は読み込んだときの値のまま）
+    void ApplyHighScores()
+    {
+        foreach (var song in songs)
+        {
+            foreach (var diff in song.difficulties)
+            {
+                if (HighScoreStore.Has(diff.chartName)) diff.highScore = HighScoreStore.Get(diff.chartName);
+            }
+        }
     }
 
     //楽曲紹介画面を出してからプレイ画面へ

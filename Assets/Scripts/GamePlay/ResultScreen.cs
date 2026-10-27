@@ -2,12 +2,13 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
-//曲が終わったら（全ノーツが消えたら）シーンを切り替えずに、Canvas上のパネル画像を割り込ませてリザルトを出す
+//曲が終わったら（曲が最後まで流れ、全ノーツが消えたら）シーンを切り替えずに、Canvas上のパネル画像を割り込ませてリザルトを出す
 //
-//  1. 最後のノーツから少し待つ（delay秒）
+//  1. 曲の終わりから少し待つ（delay秒）
 //  2. パネルを画面外からスライドさせながら表示する（slideIn秒）
 //  3. スコアと判定数を0から数え上げる（countUp秒）
-//  4. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る
+//  4. ハイスコアを出す（更新していたらNEW RECORD）
+//  5. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る。規定の曲数を遊び終えていたらオープニングに戻る
 //
 //panelはCanvasの子に置いた画像(Image)。最初は非表示にしておき、GameManagerからShowで呼び出す
 public class ResultScreen : MonoBehaviour
@@ -24,6 +25,11 @@ public class ResultScreen : MonoBehaviour
     [SerializeField] private TextMeshProUGUI preciseText;
     [SerializeField] private TextMeshProUGUI approxText;
     [SerializeField] private TextMeshProUGUI missText;
+    [SerializeField] private TextMeshProUGUI highScoreText;//未設定ならscoreTextを複製してその下に作る
+
+    [Header("ハイスコア表示（highScoreTextが未設定のときに作るテキスト）")]
+    [SerializeField] private Vector2 highScoreOffset = new Vector2(0f, -70f);//scoreTextからの位置
+    [SerializeField] private float highScoreFontScale = 0.5f;//scoreTextの文字の大きさに対する倍率
 
     [Header("演出(秒)")]
     public float delay = 1.0f;
@@ -49,15 +55,16 @@ public class ResultScreen : MonoBehaviour
     }
 
     //result: GameManager.PlayResult (score, combo, maxCombo, precisePlus, precise, approx, miss)
+    //previousBest: この譜面の今回より前のハイスコア（初めて遊んだならnull）
     //hideOnShow: パネルが出始めると同時に非アクティブにするもの（なければnull）
-    public void Show(int[] result, GameObject hideOnShow = null)
+    public void Show(int[] result, int? previousBest, GameObject hideOnShow = null)
     {
         //エディタで非表示にしてあってもコルーチンを動かせるように、先に表示状態にする（初回はここでAwakeが呼ばれる）
         gameObject.SetActive(true);
-        StartCoroutine(Run((int[])result.Clone(), hideOnShow));//表示中に値が変わらないようコピーしておく
+        StartCoroutine(Run((int[])result.Clone(), previousBest, hideOnShow));//表示中に値が変わらないようコピーしておく
     }
 
-    IEnumerator Run(int[] result, GameObject hideOnShow)
+    IEnumerator Run(int[] result, int? previousBest, GameObject hideOnShow)
     {
         yield return new WaitForSeconds(delay);
 
@@ -66,6 +73,8 @@ public class ResultScreen : MonoBehaviour
 
         SetSongInfo();
         SetCounts(result, 0f);
+        if (highScoreText == null) highScoreText = CreateHighScoreText();
+        highScoreText.text = "";
 
         //2. 画面外から表示位置へスライドさせる
         Vector2 shownPos = panel.anchoredPosition;
@@ -81,9 +90,35 @@ public class ResultScreen : MonoBehaviour
         //3. スコアと判定数を同時に数え上げる
         yield return MusicSelectView.Animate(countUp, t => SetCounts(result, MusicSelectView.EaseOut(t)));
 
-        //4. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
+        //4. 数え上げが終わってからハイスコアを出す
+        SetHighScore(result[0], previousBest);
+
+        //5. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
         while (!BackPressed()) yield return null;
-        SceneLoader.ChangeScene(GameScene.MusicSelect);
+        SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Opening);
+    }
+
+    //初プレイかハイスコア更新ならNEW RECORDと伸びた点数（初プレイは0点からの差）、そうでなければ今までのハイスコアを出す
+    void SetHighScore(int score, int? previousBest)
+    {
+        if (!previousBest.HasValue || score > previousBest.Value)
+        {
+            highScoreText.text = $"NEW RECORD! (+{score - previousBest.GetValueOrDefault():N0})";
+        }
+        else
+        {
+            highScoreText.text = $"HIGH SCORE {previousBest.Value:N0}";
+        }
+    }
+
+    TextMeshProUGUI CreateHighScoreText()
+    {
+        TextMeshProUGUI text = Instantiate(scoreText, scoreText.transform.parent);
+        text.name = "HighScoreText";
+        text.rectTransform.anchoredPosition += highScoreOffset;
+        text.fontSize = scoreText.fontSize * highScoreFontScale;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        return text;
     }
 
     bool BackPressed()

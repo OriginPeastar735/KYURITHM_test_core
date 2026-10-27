@@ -27,6 +27,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Vector2 fastLateOffset = new Vector2(0f, -0.4f);//コンボ表示からの位置
     [SerializeField] private float fastLateFontSize = 0.25f;
     string ComboStr;
+    string chartName;//今遊んでいる譜面。ハイスコアの記録に使う
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
 
     void Start()
@@ -36,7 +37,7 @@ public class GameManager : MonoBehaviour
             PlayResult[i] = 0;
         }
         //MusicSelectを経由せずに起動した場合はChartNameが空なのでデフォルト譜面を読む
-        string chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
+        chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
         NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
 
@@ -50,11 +51,14 @@ public class GameManager : MonoBehaviour
         PlayResult[0] = CalcScore();
         ScoreText.text = PlayResult[0].ToString();
 
-        //最後のノーツの判定でPlayResultは確定しているので、リストが空になったらそのままリザルトを出す
-        if (!isFinished && NoteManager.instance.AllNotesCleared)
+        //曲が最後まで流れ、すべてのノーツの判定が終わったらリザルトを出す（ノーツが0個の譜面は曲の終わりだけで出す）
+        if (!isFinished && MusicManager.instance.IsSongFinished && (NoteManager.instance.AllNotesCleared || totalCombo == 0))
         {
             isFinished = true;
-            if (resultScreen != null) resultScreen.Show(PlayResult, hideOnResult);
+            int previousBest = HighScoreStore.Get(chartName);
+            bool hasPlayed = HighScoreStore.Has(chartName);
+            HighScoreStore.Submit(chartName, PlayResult[0]);
+            if (resultScreen != null) resultScreen.Show(PlayResult, hasPlayed ? previousBest : (int?)null, hideOnResult);
         }
     }
 

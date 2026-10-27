@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO.Ports;
 using System.Threading;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 //入力元。Inspectorまたはプレイ中にswitchKeyで切り替える
 public enum InputSource
@@ -14,8 +16,12 @@ public enum InputSource
 }
 
 //入力をレーン単位の状態（押された/押されている/離された）に変換する
-//判定側はこのクラスだけを参照し、入力デバイスの違いはReadInputで吸収する
-[DefaultExecutionOrder(-100)]//JudgeManagerより先に入力を更新する
+//判定側はこのクラスだけを参照し、入力デバイスの違いはReadController・ReadKeyboardで吸収する
+//
+//押した時刻(laneDownTimestamp)はStopwatch.GetTimestamp()の値で持ち、MusicManager.ToPlayTimeで曲の時刻に直して判定に使う
+//  コントローラー: 受信スレッドがパケットを受け取った時刻。フレームの間隔に関係なく押した時刻で判定できる
+//  キーボード: 旧Input Managerはフレーム単位でしか読めないので、そのフレームで読んだ時刻（テスト用）
+[DefaultExecutionOrder(-100)]//JudgeManagerより先に入力を更新する（MusicManagerはさらに先）
 public class InputManager : MonoBehaviour
 {
     public static InputManager instance;
@@ -25,7 +31,11 @@ public class InputManager : MonoBehaviour
     public bool[] laneDown = new bool[LaneCount];//このフレームで押された
     public bool[] laneHeld = new bool[LaneCount];//押されている
     public bool[] laneUp = new bool[LaneCount];//このフレームで離された
+    public long[] laneDownTimestamp = new long[LaneCount];//laneDownがtrueのレーンを押した時刻（Stopwatch.GetTimestamp()の値）
     private bool[] prevHeld = new bool[LaneCount];//直前のフレームで押されている
+    private bool[] keyHeld = new bool[LaneCount];//キーボードで押されている
+    private bool[] prevKeyHeld = new bool[LaneCount];
+    private uint controllerMask;//メインスレッドで反映済みのコントローラーの押下状態(bit i = lane i)
 
     [Header("入力元の切り替え")]
     [SerializeField] private InputSource source = InputSource.Both;
@@ -53,7 +63,14 @@ public class InputManager : MonoBehaviour
     private SerialPort port;
     private Thread readThread;
     private volatile bool reading;
-    private volatile uint sensorMask;//32レーン分の押下状態(bit i = lane i)。受信スレッドが書き、Updateが読む
+
+    //センサーの押下状態が変わったときの記録。受信スレッドが積み、Updateが受信順に取り出す
+    private struct SensorEvent
+    {
+        public long timestamp;//受信した時刻（Stopwatch.GetTimestamp()の値）
+        public uint mask;//変わった後の32レーン分の押下状態
+    }
+    private readonly ConcurrentQueue<SensorEvent> sensorEvents = new ConcurrentQueue<SensorEvent>();
 
     private bool UseKeyboard => source != InputSource.Controller;
     private bool UseController => source != InputSource.Keyboard;
@@ -76,15 +93,17 @@ public class InputManager : MonoBehaviour
 
         //Array.Copy(元, 先, 個数): 配列の中身をコピーする。laneHeldの内容をprevHeldにコピー
         Array.Copy(laneHeld, prevHeld, LaneCount);
+        Array.Clear(laneDown, 0, LaneCount);
+        Array.Clear(laneHeld, 0, LaneCount);
 
-        //現在のレーン押下情報の取得
-        ReadInput(laneHeld);
+        //押した瞬間(laneDown)と押した時刻はそれぞれの中で記録する
+        if (UseController) ReadController();
+        if (UseKeyboard) ReadKeyboard();
 
-        //前フレームとの差分から押した瞬間・離した瞬間を求める
+        //フレームの間に押して離した場合も、離した瞬間として扱う
         for (int i = 0; i < LaneCount; i++)
         {
-            laneDown[i] = laneHeld[i] && !prevHeld[i];
-            laneUp[i] = !laneHeld[i] && prevHeld[i];
+            laneUp[i] = !laneHeld[i] && (prevHeld[i] || laneDown[i]);
         }
     }
 
@@ -97,32 +116,56 @@ public class InputManager : MonoBehaviour
         Debug.Log($"入力元: {source}");
     }
 
-    //現在押されているレーンをheldに書き込む
-    private void ReadInput(bool[] held)
+    //受信スレッドがためた変化を受信した順に反映する。押された時刻は受信した時刻になる
+    //フレームの間に押して離したレーンも、押した瞬間として取りこぼさない
+    private void ReadController()
     {
-        Array.Clear(held, 0, LaneCount);
-
-        if (UseController)
+        while (sensorEvents.TryDequeue(out SensorEvent e))
         {
-            uint mask = sensorMask;
+            uint pressed = e.mask & ~controllerMask;
             for (int lane = 0; lane < LaneCount; lane++)
             {
-                if ((mask & (1u << lane)) != 0) held[lane] = true;
+                if ((pressed & (1u << lane)) != 0) MarkDown(lane, e.timestamp);
+            }
+            controllerMask = e.mask;
+        }
+
+        for (int lane = 0; lane < LaneCount; lane++)
+        {
+            if ((controllerMask & (1u << lane)) != 0) laneHeld[lane] = true;
+        }
+    }
+
+    //キーボードはフレーム単位でしか読めないので、押された時刻はこのフレームで読んだ時刻にする
+    private void ReadKeyboard()
+    {
+        long now = Stopwatch.GetTimestamp();
+        Array.Copy(keyHeld, prevKeyHeld, LaneCount);
+        Array.Clear(keyHeld, 0, LaneCount);
+
+        for (int k = 0; k < testKeys.Length; k++)
+        {
+            if (!Input.GetKey(testKeys[k])) continue;
+            for (int j = 0; j < lanesPerKey; j++)
+            {
+                int lane = k * lanesPerKey + j;
+                if (lane < LaneCount) keyHeld[lane] = true;
             }
         }
 
-        if (UseKeyboard)
+        for (int lane = 0; lane < LaneCount; lane++)
         {
-            for (int k = 0; k < testKeys.Length; k++)
-            {
-                if (!Input.GetKey(testKeys[k])) continue;
-                for (int j = 0; j < lanesPerKey; j++)
-                {
-                    int lane = k * lanesPerKey + j;
-                    if (lane < LaneCount) held[lane] = true;
-                }
-            }
+            if (keyHeld[lane] && !prevKeyHeld[lane]) MarkDown(lane, now);
+            if (keyHeld[lane]) laneHeld[lane] = true;
         }
+    }
+
+    //同じフレームで2回押された場合は早い方の時刻を使う
+    private void MarkDown(int lane, long timestamp)
+    {
+        if (laneDown[lane]) return;
+        laneDown[lane] = true;
+        laneDownTimestamp[lane] = timestamp;
     }
 
     //ノーツの範囲[lane, lane+width)のどこかがこのフレームで押されたか
@@ -186,11 +229,21 @@ public class InputManager : MonoBehaviour
         readThread = null;
         if (port != null && port.IsOpen) port.Close();
         port = null;
-        sensorMask = 0;
+        while (sensorEvents.TryDequeue(out _)) { }
+        controllerMask = 0;
     }
 
+    //押下状態が変わったときだけ、受信した時刻と一緒に記録する
     private void ReadLoop()
     {
+        uint lastMask = 0;
+        void Push(uint mask)
+        {
+            if (mask == lastMask) return;
+            sensorEvents.Enqueue(new SensorEvent { timestamp = Stopwatch.GetTimestamp(), mask = mask });
+            lastMask = mask;
+        }
+
         while (reading)
         {
             try
@@ -204,17 +257,17 @@ public class InputManager : MonoBehaviour
                     if (b < 0) throw new TimeoutException();
                     mask |= (uint)b << (i * 8);
                 }
-                sensorMask = mask;
+                Push(mask);
             }
             catch (TimeoutException)
             {
-                sensorMask = 0;//データが途切れたら押しっぱなしにしない
+                Push(0);//データが途切れたら押しっぱなしにしない
             }
             catch (Exception)
             {
                 break;//切断
             }
         }
-        sensorMask = 0;
+        Push(0);
     }
 }

@@ -28,7 +28,9 @@ public class Hold : MonoBehaviour
 
         //x,yと傾きはLaneSurfaceShapeが子の板で作る（傾斜の折れ目をまたぐ場合は折れ目で分割される）
         //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
-        gameObject.AddComponent<LaneSurfaceShape>().SetRange(lane, width, 0.01f);
+        LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
+        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、中心に線を入れる
+        shape.SetRange(lane, width, 0.01f);
 
         //自身はz方向に動かすだけなので原点に置く
         transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
