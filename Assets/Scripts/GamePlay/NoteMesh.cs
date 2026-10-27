@@ -89,6 +89,7 @@ public static class NoteMesh
         }
 
         //側面は輪郭の1辺ごとに四角形を作る（辺ごとに頂点を分けて、外向きの法線にする）
+        //UVは上面と同じく上から見た位置にする（縁のグラデーションが奥行き方向に掛かるように）
         for (int i = 0; i < n; i++)
         {
             Vector2 p = outline[i];
@@ -99,10 +100,12 @@ public static class NoteMesh
             vertices.Add(new Vector3(p.x, hh, p.y));//s+1: 上のp
             vertices.Add(new Vector3(q.x, hh, q.y));//s+2: 上のq
             vertices.Add(new Vector3(q.x, -hh, q.y));//s+3: 底のq
+            Vector2 uvP = new Vector2(p.x / width + 0.5f, p.y / depth + 0.5f);
+            Vector2 uvQ = new Vector2(q.x / width + 0.5f, q.y / depth + 0.5f);
             for (int k = 0; k < 4; k++)
             {
                 normals.Add(normal);
-                uvs.Add(new Vector2(k == 0 || k == 1 ? 0f : 1f, k == 1 || k == 2 ? 1f : 0f));
+                uvs.Add(k == 0 || k == 1 ? uvP : uvQ);
             }
             triangles.Add(s); triangles.Add(s + 1); triangles.Add(s + 2);
             triangles.Add(s); triangles.Add(s + 2); triangles.Add(s + 3);

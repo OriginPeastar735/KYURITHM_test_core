@@ -29,6 +29,16 @@ public class NoteManager : MonoBehaviour
     public float centerLineWidthRatio = 0.08f;//中心の線の太さ
     public float centerLineInsetRatio = 0.7f;//中心の線の端からノーツの端までの長さ
     private Material centerLineMaterial;//線のマテリアル。最初のノーツのマテリアルを複製して色だけ変える
+    public bool showOutline = true;//ノーツの周りに縁を付けるか
+    //縁の色。左端がノーツの奥側（画面の上側）、右端が手前側（画面の下側）
+    public Gradient outlineGradient = new Gradient
+    {
+        colorKeys = new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.black, 1f) },
+        alphaKeys = new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
+    };
+    public float outlineWidthRatio = 0.2f;//縁の太さ（縁はノーツの内側に描くので、隣り合うノーツの間にはこの2倍の縁が入る）
+    private Material outlineMaterial;//縁のマテリアル。線と同じく最初のノーツのマテリアルを複製し、グラデーションのテクスチャを貼る
+    private Texture2D outlineTexture;
 
     private float startTime;
 
@@ -117,23 +127,53 @@ public class NoteManager : MonoBehaviour
     void OnDestroy()
     {
         if (centerLineMaterial != null) Destroy(centerLineMaterial);
+        if (outlineMaterial != null) Destroy(outlineMaterial);
+        if (outlineTexture != null) Destroy(outlineTexture);
     }
 
-    //ノーツの角を丸め、withCenterLineなら中心に線を入れる（SetRangeより前に呼ぶ）
+    //ノーツの角を丸め、withCenterLineなら中心に線を入れる。showOutlineなら周りに縁を付ける（SetRangeより前に呼ぶ）
     public void ApplyNoteStyle(LaneSurfaceShape shape, bool withCenterLine)
     {
-        if (!withCenterLine || !showCenterLine)
+        Material noteMaterial = shape.GetComponent<MeshRenderer>().sharedMaterial;
+        if (withCenterLine && showCenterLine)
+        {
+            if (centerLineMaterial == null) centerLineMaterial = CreateColorMaterial(noteMaterial, "NoteCenterLine", centerLineColor);
+            shape.SetStyle(cornerRadiusRatio, centerLineMaterial, centerLineWidthRatio, centerLineInsetRatio);
+        }
+        else
         {
             shape.SetStyle(cornerRadiusRatio);
-            return;
         }
-        if (centerLineMaterial == null)
+
+        if (showOutline)
         {
-            //ノーツと同じシェーダーのまま色だけ変える（ビルドでシェーダーが含まれないことを防ぐため、新しくシェーダーを探さない）
-            centerLineMaterial = new Material(shape.GetComponent<MeshRenderer>().sharedMaterial) { name = "NoteCenterLine" };
-            centerLineMaterial.color = centerLineColor;
+            if (outlineMaterial == null) outlineMaterial = CreateOutlineMaterial(noteMaterial);
+            shape.SetOutline(outlineMaterial, outlineWidthRatio);
         }
-        shape.SetStyle(cornerRadiusRatio, centerLineMaterial, centerLineWidthRatio, centerLineInsetRatio);
+    }
+
+    //縁のマテリアル。色は白にして、outlineGradientを縦に並べたテクスチャを貼る
+    //ノーツの板のUVのvは奥側(-z)が0、手前側(+z)が1なので、テクスチャの下端が奥側の色になる
+    //（ノーツは-z側から判定ライン(z=0)に向かって流れてくるので、-z側が画面の上側）
+    private Material CreateOutlineMaterial(Material source)
+    {
+        const int size = 64;
+        outlineTexture = new Texture2D(1, size) { name = "NoteOutlineGradient", wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < size; y++)
+        {
+            outlineTexture.SetPixel(0, y, outlineGradient.Evaluate(y / (size - 1f)));
+        }
+        outlineTexture.Apply();
+
+        Material material = CreateColorMaterial(source, "NoteOutline", Color.white);
+        material.mainTexture = outlineTexture;
+        return material;
+    }
+
+    //ノーツと同じシェーダーのまま色だけ変えたマテリアルを作る（ビルドでシェーダーが含まれないことを防ぐため、新しくシェーダーを探さない）
+    private Material CreateColorMaterial(Material source, string name, Color color)
+    {
+        return new Material(source) { name = name, color = color };
     }
 
     // Start is called before the first frame update

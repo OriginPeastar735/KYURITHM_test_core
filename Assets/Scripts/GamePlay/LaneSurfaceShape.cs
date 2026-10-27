@@ -10,6 +10,7 @@ public class LaneSurfaceShape : MonoBehaviour
 {
     private const float CenterLineThickness = 0.002f;//中心の線の厚み
     private const float CenterLineLift = 0.001f;//中心の線をノーツの上面から浮かせる高さ（チラつき防止）
+    private const float OutlineDrop = 0.002f;//縁の板をノーツより下げる高さ（上面が重なってチラつかないように）
 
     private Transform[] pieces;//区間ごとの板（左の傾斜・水平・右の傾斜）
     private MeshFilter[] pieceFilters;
@@ -18,6 +19,8 @@ public class LaneSurfaceShape : MonoBehaviour
     private float cornerRadius;//上から見た角の丸みの半径（ワールド座標）。0なら四角
     private LaneSurfaceShape centerLine;//中心の線（無ければnull）
     private float centerLineInset;//線の端からノーツの端までの長さ（ワールド座標）
+    private LaneSurfaceShape outline;//ノーツの周りの縁（無ければnull）
+    private float outlineWidth;//縁の太さ（ワールド座標）
 
     private float lastLane = float.NaN, lastWidth, lastHeight;//前回のSetRange（同じなら作り直さない）
 
@@ -65,6 +68,30 @@ public class LaneSurfaceShape : MonoBehaviour
         centerLineInset = depth * centerLineInsetRatio;
     }
 
+    //ノーツの縁を付ける。SetStyleの後、SetRangeより前に呼ぶ
+    //outlineMaterial: 縁のマテリアル   outlineWidthRatio: 縁の太さ（ノーツの奥行きに対する割合）
+    //
+    //  横から見た図。ノーツと同じ大きさの縁の板を少し下げて置き、色の板は縁の太さの分だけ内側に縮める
+    //  （縁を外側に広げると、隣のノーツの下に隠れてノーツ同士がつながって見えるため）
+    //     ┌─┬──────────┬─┐ ← 色の板
+    //     └─┴──────────┴─┘ ← 縁の板（ノーツ本来の大きさ）
+    public void SetOutline(Material outlineMaterial, float outlineWidthRatio)
+    {
+        Setup();
+        if (outline != null) return;
+        float depth = baseScale.z;
+        outlineWidth = depth * outlineWidthRatio;
+        lastLane = float.NaN;//次のSetRangeで作り直す
+
+        //縁も同じ仕組みで傾斜に沿わせる
+        GameObject obj = new GameObject("Outline");
+        obj.transform.SetParent(transform, false);
+        obj.transform.localScale = new Vector3(1f, baseScale.y, depth);
+        obj.AddComponent<MeshRenderer>().sharedMaterial = outlineMaterial;
+        outline = obj.AddComponent<LaneSurfaceShape>();
+        outline.SetStyle(cornerRadius / depth);
+    }
+
     //lane〜lane+widthの範囲に、面からheightだけ浮かせて板を並べる
     public void SetRange(float lane, float width, float height)
     {
@@ -74,9 +101,17 @@ public class LaneSurfaceShape : MonoBehaviour
         lastWidth = width;
         lastHeight = height;
 
+        //縁があるときは、色の板を縁の太さの分だけ内側に縮める。角の丸みも同じ中心になるように小さくする
+        float inset = outline != null ? outlineWidth / LaneLayout.LaneWidth : 0f;
+        float bodyLane = lane + inset;
+        float bodyEnd = lane + width - inset;
+        float bodyDepth = Mathf.Max(baseScale.z - outlineWidth * 2f, 0.001f);
+        float bodyRadius = Mathf.Max(cornerRadius - outlineWidth, 0f);
+
         for (int i = 0; i < pieces.Length; i++)
         {
-            bool visible = LaneLayout.ClipToSegment(i, lane, lane + width, out float from, out float to);
+            //縮めた結果幅が無くなる細いノーツは、ClipToSegmentがfalseになり縁だけが表示される
+            bool visible = LaneLayout.ClipToSegment(i, bodyLane, bodyEnd, out float from, out float to);
             pieces[i].gameObject.SetActive(visible);
             if (!visible) continue;
 
@@ -86,18 +121,23 @@ public class LaneSurfaceShape : MonoBehaviour
 
             //ノーツの両端だけ角を丸める（折れ目で切った側は丸めない）
             //laneが小さい側(from)が+x側になる
-            float radiusFrom = Mathf.Approximately(from, lane) ? cornerRadius : 0f;
-            float radiusTo = Mathf.Approximately(to, lane + width) ? cornerRadius : 0f;
-            pieceFilters[i].sharedMesh = NoteMesh.Box((to - from) * LaneLayout.LaneWidth, baseScale.y, baseScale.z, radiusFrom, radiusTo);
+            float radiusFrom = Mathf.Approximately(from, bodyLane) ? bodyRadius : 0f;
+            float radiusTo = Mathf.Approximately(to, bodyEnd) ? bodyRadius : 0f;
+            pieceFilters[i].sharedMesh = NoteMesh.Box((to - from) * LaneLayout.LaneWidth, baseScale.y, bodyDepth, radiusFrom, radiusTo);
         }
 
         if (centerLine != null)
         {
             //線は両端をcenterLineInsetだけ内側に縮める。縮めた結果長さが無くなる細いノーツには出さない
-            float inset = centerLineInset / LaneLayout.LaneWidth;
-            float lineWidth = width - inset * 2f;
+            float lineInset = centerLineInset / LaneLayout.LaneWidth;
+            float lineWidth = width - lineInset * 2f;
             centerLine.gameObject.SetActive(lineWidth > 0f);
-            if (lineWidth > 0f) centerLine.SetRange(lane + inset, lineWidth, height + baseScale.y / 2f + CenterLineThickness / 2f + CenterLineLift);
+            if (lineWidth > 0f) centerLine.SetRange(lane + lineInset, lineWidth, height + baseScale.y / 2f + CenterLineThickness / 2f + CenterLineLift);
+        }
+
+        if (outline != null)
+        {
+            outline.SetRange(lane, width, height - OutlineDrop);
         }
     }
 }
