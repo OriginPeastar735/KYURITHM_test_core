@@ -63,6 +63,7 @@ public class LongNote : MonoBehaviour
 
     private LaneSurfaceShape startShape;//始点・終点ノーツを傾斜に沿わせて描画する
     private LaneSurfaceShape endShape;
+    private float frontOffset;//始点・終点ノーツの中心から手前の面までの距離（手前の面が判定ラインに触れたときが判定のタイミング）
 
     void Awake()
     {
@@ -112,6 +113,8 @@ public class LongNote : MonoBehaviour
         //角を丸める。始点と最後の終点には中心に線を入れ、中間ノーツ（最後以外のセクションの終点）は丸めるだけにする
         if (startShape != null) NoteManager.instance.ApplyNoteStyle(startShape, true);
         if (endShape != null) NoteManager.instance.ApplyNoteStyle(endShape, isLastSection);
+        if (startShape != null) frontOffset = startShape.Depth / 2f;
+        else if (endShape != null) frontOffset = endShape.Depth / 2f;
 
         //直線なら1区間、曲線なら分割して帯を描く
         if (bodyMesh != null) SetupBodyMesh(curve == SlideCurve.Linear ? 1 : Mathf.Max(1, curveSegments));
@@ -200,7 +203,7 @@ public class LongNote : MonoBehaviour
         //押している間は始点を消しているので更新しない（判定ライン上の小数のレーン位置で毎フレーム板を作り直さないように）
         if(StartNote != null && StartNote.gameObject.activeSelf)
         {
-            StartNote.localPosition = new Vector3(0, 0, startZ);
+            StartNote.localPosition = new Vector3(0, 0, startZ - frontOffset);
             startShape.SetRange(startLaneF, startWidthF, 0.01f);
         }
         if(EndNote != null)
@@ -209,7 +212,7 @@ public class LongNote : MonoBehaviour
             if (EndNote.gameObject.activeSelf != showEnd) EndNote.gameObject.SetActive(showEnd);
             if (showEnd)
             {
-                EndNote.localPosition = new Vector3(0, 0, endZ);
+                EndNote.localPosition = new Vector3(0, 0, endZ - frontOffset);
                 endShape.SetRange(endLane, endWidth, 0.01f);
             }
         }

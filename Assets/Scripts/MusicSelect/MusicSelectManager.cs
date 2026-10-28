@@ -91,6 +91,8 @@ public class MusicSelectManager : MonoBehaviour
     private SongData chosenSong;//Confirmで選ばれている曲（ランダム選曲カードなら抽選された曲）
 
     private MusicSelectView view;
+    private MusicPreview preview;
+    private bool chosenByRandom;//Confirmの曲がランダム選曲カードで抽選された曲か（試聴を流さない）
     private float remainingTime;
     private bool started = false;
     private float inputLockUntil;
@@ -128,6 +130,7 @@ public class MusicSelectManager : MonoBehaviour
         settings = CreateSettings();
 
         view = gameObject.AddComponent<MusicSelectView>();
+        preview = gameObject.AddComponent<MusicPreview>();
         view.Build(ItemAt);
         view.SetPlayer(PlaySession.PlayerName, PlaySession.TrackNumber, PlaySession.IsFinalTrack);
         RefreshInfo();
@@ -161,6 +164,7 @@ public class MusicSelectManager : MonoBehaviour
             }
             if (sortPopupOpen && Time.time >= sortPopupUntil) CloseSortPopup();
         }
+        preview.SetSong(PreviewAudioPath());
 
         Array.Copy(held, prevHeld, ZoneCount);
     }
@@ -299,6 +303,7 @@ public class MusicSelectManager : MonoBehaviour
         if (forward)
         {
             songPosition = position;
+            chosenByRandom = SelectIndex(position) == order.Count;
             chosenSong = SelectedSong();
         }
         CloseSortPopup();
@@ -335,6 +340,17 @@ public class MusicSelectManager : MonoBehaviour
         ApplySort();
         int index = order.FindIndex(i => songs[i].id == PlaySession.MusicIndex);
         if (index >= 0) position = index;
+    }
+
+    //試聴で流す曲の音源。流さないときはnull
+    //ランダム選曲カード、楽曲選択でカードを左右に送っている間、曲を決定した後は流さない
+    string PreviewAudioPath()
+    {
+        if (started) return null;
+        if (phase != Phase.SelectSong) return chosenByRandom ? null : chosenSong.audioPath;
+        if (held[(int)SelectZone.Left] || held[(int)SelectZone.Right]) return null;
+        int index = SelectIndex(position);
+        return index == order.Count ? null : songs[order[index]].audioPath;
     }
 
     //プレイ画面で記録したハイスコアを曲リストに反映する（記録の無い譜面は読み込んだときの値のまま）
@@ -518,7 +534,7 @@ public class MusicSelectManager : MonoBehaviour
     }
 
     // ===== 設定 =====
-    //値はPlaySessionに保存する（プレイ画面への反映はまだ）
+    //値はPlaySessionに保存し、プレイ画面で読む
     List<SettingItem> CreateSettings()
     {
         return new List<SettingItem>
@@ -534,20 +550,36 @@ public class MusicSelectManager : MonoBehaviour
             },
             new SettingItem
             {
-                name = "壁",
-                description = "レーンの奥側を見えなくする（0%で全部見える）",
-                value = () => $"{PlaySession.WallPercent}%",
-                canChange = d => d < 0 ? PlaySession.WallPercent > 0 : PlaySession.WallPercent < 100,
-                change = d => PlaySession.WallPercent = Mathf.Clamp(PlaySession.WallPercent + d, 0, 100),
-            },
-            new SettingItem
-            {
                 name = "タイミング調整",
                 description = "判定のタイミングをずらす",
                 value = () => $"{PlaySession.TimingOffsetMs:+0;-0;0}ms",
                 canChange = d => d < 0 ? PlaySession.TimingOffsetMs > -100 : PlaySession.TimingOffsetMs < 100,
                 change = d => PlaySession.TimingOffsetMs = Mathf.Clamp(PlaySession.TimingOffsetMs + d * 5, -100, 100),
             },
+            PercentSetting("壁", "レーンの奥側を見えなくする（0%で全部見える）",
+                () => PlaySession.WallPercent, v => PlaySession.WallPercent = v, 0, 100, 5),
+            PercentSetting("レーンの濃さ", "0%でレーンが透明、100%で背景が見えない",
+                () => PlaySession.LaneOpacityPercent, v => PlaySession.LaneOpacityPercent = v, 0, 100, 5),
+            new SettingItem
+            {
+                name = "分割線",
+                description = "レーンの区切り線を何レーンごとに引くか",
+                value = () => PlaySession.LineDivision > 0 ? PlaySession.LineDivision.ToString() : "なし",
+                canChange = d =>
+                {
+                    int next = Array.IndexOf(lineDivisions, PlaySession.LineDivision) + d;
+                    return next >= 0 && next < lineDivisions.Length;
+                },
+                change = d => PlaySession.LineDivision = lineDivisions[Array.IndexOf(lineDivisions, PlaySession.LineDivision) + d],
+            },
+            PercentSetting("分割線の濃さ", "レーンの区切り線の濃さ（0%で見えない）",
+                () => PlaySession.LineOpacityPercent, v => PlaySession.LineOpacityPercent = v, 0, 100, 5),
+            PercentSetting("背景の明るさ", "プレイ中の背景の明るさ",
+                () => PlaySession.BackgroundBrightnessPercent, v => PlaySession.BackgroundBrightnessPercent = v, 50, 100, 5),
+            PercentSetting("キービーム", "押したときに光る長さ（レーンの長さに対する割合）",
+                () => PlaySession.KeyBeamPercent, v => PlaySession.KeyBeamPercent = v, 0, 100, 5),
+            PercentSetting("ノーツの太さ", "ノーツの奥行きの太さ",
+                () => PlaySession.NoteThicknessPercent, v => PlaySession.NoteThicknessPercent = v, 10, 100, 10),
             new SettingItem
             {
                 name = "FAST/LATE表示",
@@ -558,6 +590,22 @@ public class MusicSelectManager : MonoBehaviour
                 minusLabel = "OFF",
                 plusLabel = "ON",
             },
+        };
+    }
+
+    //分割線の設定で選べるレーン数。+を押すほど細かくなる（0はなし）
+    static readonly int[] lineDivisions = { 0, 8, 4, 2, 1 };
+
+    //min〜maxの%をstep刻みで変える設定
+    static SettingItem PercentSetting(string name, string description, Func<int> get, Action<int> set, int min, int max, int step)
+    {
+        return new SettingItem
+        {
+            name = name,
+            description = description,
+            value = () => $"{get()}%",
+            canChange = d => d < 0 ? get() > min : get() < max,
+            change = d => set(Mathf.Clamp(get() + d * step, min, max)),
         };
     }
 

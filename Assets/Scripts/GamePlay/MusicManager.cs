@@ -83,7 +83,7 @@ public class MusicManager : MonoBehaviour
         audioReady = true;
     }
 
-    static AudioType AudioTypeOf(string path)
+    public static AudioType AudioTypeOf(string path)
     {
         switch (Path.GetExtension(path).ToLowerInvariant())
         {

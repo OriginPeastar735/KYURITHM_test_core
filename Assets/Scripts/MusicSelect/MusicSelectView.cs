@@ -55,7 +55,7 @@ public class MusicSelectView : MonoBehaviour
 {
     const float RefWidth = 1920f;
     const float RefHeight = 1080f;
-    static readonly float SlopeLength = RefWidth / (2f + Mathf.Sqrt(2f));//斜面センサー1本分の長さ（キャンバス座標）
+    static readonly float SlopeLength = RefWidth * SensorLayout.SlopeWidthRatio;//斜面センサー1本分の長さ（キャンバス座標）
     static readonly float SlopeSpan = SlopeLength / Mathf.Sqrt(2f);//斜面が画面下辺・側辺を占める長さ
     static readonly float BottomWidth = SlopeLength * 2f;//底面センサーの長さ
 

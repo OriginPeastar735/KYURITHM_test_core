@@ -13,8 +13,7 @@ public static class LaneLayout
     public static float FieldWidth = 8f;//フィールド全体の幅（傾斜を平らに伸ばしたときの長さ。見た目に合わせて調整）
     public static float FieldStartX = 0f;//水平に並べたときのlane0側の端のx座標
     public static int SideLaneCount = 8;//左右それぞれの傾斜レーンの本数
-    [SerializeField]
-    public static float SlopeAngle = 60f;//傾斜レーンが真ん中のレーンとなす角度（度）
+    public static float SlopeAngle = SensorLayout.SlopeAngle;//傾斜レーンが真ん中のレーンとなす角度（度）。判定ラインをセンサーに重ねるため、斜面センサーと同じ角度にする
     public static float LaneLength = 40f;//判定ラインからレーンの奥端までの長さ。LaneFieldBuilderのInspectorの値で上書きされる
     //判定ラインから壁（ノーツが見え始める位置）までの距離。選曲画面の設定で、レーンの奥側から何%を見えなくするか決める
     public static float VisibleLength => LaneLength * (100 - PlaySession.WallPercent) / 100f;

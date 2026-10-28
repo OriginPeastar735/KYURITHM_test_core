@@ -132,8 +132,14 @@ public class NoteManager : MonoBehaviour
     }
 
     //ノーツの角を丸め、withCenterLineなら中心に線を入れる。showOutlineなら周りに縁を付ける（SetRangeより前に呼ぶ）
+    //ノーツの太さ（奥行き）も、選曲画面の設定に合わせてここで変える
     public void ApplyNoteStyle(LaneSurfaceShape shape, bool withCenterLine)
     {
+        //プレハブの奥行きを太さ50%とする。LaneSurfaceShapeはSetStyleの時点のスケールを奥行きとして使うので、その前に変える
+        Vector3 scale = shape.transform.localScale;
+        scale.z *= PlaySession.NoteThicknessPercent / 50f;
+        shape.transform.localScale = scale;
+
         Material noteMaterial = shape.GetComponent<MeshRenderer>().sharedMaterial;
         if (withCenterLine && showCenterLine)
         {

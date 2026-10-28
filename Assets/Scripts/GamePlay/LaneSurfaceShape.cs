@@ -16,6 +16,9 @@ public class LaneSurfaceShape : MonoBehaviour
     private MeshFilter[] pieceFilters;
     private Vector3 baseScale;//プレハブ元々のスケール。yを厚み、zを奥行きとして使う
 
+    //板の奥行き（z方向の長さ）。SetStyleより後に読む
+    public float Depth => baseScale.z;
+
     private float cornerRadius;//上から見た角の丸みの半径（ワールド座標）。0なら四角
     private LaneSurfaceShape centerLine;//中心の線（無ければnull）
     private float centerLineInset;//線の端からノーツの端までの長さ（ワールド座標）

@@ -43,5 +43,7 @@ public class railfade : MonoBehaviour
     {
         Color c = rend.material.color;
         rend.material.color = new Color(c.r, c.g, c.b, a);
+        //透明にしても光の反射は残って薄く見えるので、透明のときは描画しない
+        rend.enabled = a > 0;
     }
 }

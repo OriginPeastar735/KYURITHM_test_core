@@ -33,5 +33,11 @@ public static class PlaySession
     public static float HiSpeed = 5f;//ノーツの速さ
     public static int TimingOffsetMs = 0;//判定タイミングの調整(ms)。+にするとノーツの到着と判定が遅れる
     public static int WallPercent = 0;//壁の位置。レーンの奥側から何%を見えなくするか（0%で全部見える、100%で何も見えない）
+    public static int LaneOpacityPercent = 80;//レーンの床の濃さ（0%で透明、100%で背景が見えない）
+    public static int BackgroundBrightnessPercent = 80;//プレイ中の背景の明るさ（50%〜100%）
+    public static int LineOpacityPercent = 30;//レーンの区切り線の濃さ（0%で見えない）
+    public static int LineDivision = 4;//区切り線を何レーンごとに引くか（0なら引かない。底面と斜面の境目・斜面の端は常に引く）
+    public static int KeyBeamPercent = 20;//押したときに光るキービームの長さ（レーンの長さに対する%）
+    public static int NoteThicknessPercent = 50;//ノーツの太さ（奥行き）。50%がプレハブのままの太さ
     public static bool ShowFastLate = false;//FAST/LATEを表示するか（通常はOFF）
 }

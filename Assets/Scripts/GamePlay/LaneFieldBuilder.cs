@@ -14,67 +14,153 @@ public class LaneFieldBuilder : MonoBehaviour
 
     public int thickLineInterval = 4;//この本数ごとに区切り線を太くする（キー単位）
     public float thickLineScale = 2f;//太い区切り線の太さ倍率
-    public float laneLength = 40f;//判定ラインからレーンの奥端までの長さ。これより奥のノーツは表示しない
+    public float foldLineScale = 5f;//底面と斜面の境目・斜面の端の線（境界線）の太さ倍率
+    public float maxLineAlpha = 0.5f;//区切り線の濃さ100%のときのアルファ（100%でも真っ白だと邪魔なので抑える）
+    public float boundaryLineAlpha = 0.8f;//境界線の濃さ。区切り線の濃さの設定とは別に、常にはっきり見せる
+    public Color judgeLineColor = new Color(0.8f, 0.8f, 0.8f, 1f);//判定ラインと壁の線の色
+    public float bottomSmoothness = 0.15f;//底面の床の滑らかさ。上を向いた底面は光を強く反射して白っぽく見えるので、斜面より下げる
+    public float laneLength = 30f;//判定ラインからレーンの奥端までの長さ。これより奥のノーツは表示しない
     public float wallLineThickness = 2f / 3f;//壁の線の太さ（判定ラインの太さに対する割合）
+
+    //半透明のものを描く順番（数字が大きいほど後に描かれて手前に見える）。床 → キービーム → 区切り線 → 判定ライン・壁の線
+    const int RailQueue = 3000;
+    const int BeamQueue = 3001;
+    const int LineQueue = 3002;
+    const int JudgeLineQueue = 3003;
 
     void Awake()
     {
         LaneLayout.LaneLength = laneLength;
+        //判定ラインが筐体のセンサーに重なるようにカメラを置く
+        Camera cam = Camera.main;
+        if (cam != null && cam.GetComponent<SensorCameraFit>() == null) cam.gameObject.AddComponent<SensorCameraFit>();
 
         //プレイ開始時にレーンを構築する。
         //ライトは1レーンに1つで32個、区切り線は両端を含むので33本をプレハブから生成する
         BuildLights();
         BuildLines();
-        BuildPerLane(JudgeLinePrefab, "JudgeLine", false);
-        BuildPerLane(RailVisualPrefab, "RailVisual", true);
-        BuildWallLine();
+        Material judgeMaterial = QueuedMaterial(JudgeLinePrefab, JudgeLineQueue);
+        if (judgeMaterial != null) judgeMaterial.SetColor("_BaseColor", judgeLineColor);
+        BuildPerLane(JudgeLinePrefab, "JudgeLine", false, judgeMaterial, judgeMaterial);
+        //床の濃さは選曲画面の設定。0%なら床を作らない（透明にしても光の反射は残るため）
+        if (PlaySession.LaneOpacityPercent > 0)
+        {
+            Material sideMaterial = RailMaterial();
+            Material bottomMaterial = sideMaterial != null ? new Material(sideMaterial) : null;
+            if (bottomMaterial != null) bottomMaterial.SetFloat("_Smoothness", bottomSmoothness);
+            BuildPerLane(RailVisualPrefab, "RailVisual", true, sideMaterial, bottomMaterial);
+        }
+        BuildWallLine(judgeMaterial);
+    }
+
+    //prefabのマテリアルを複製し、描く順番をqueueにする
+    private Material QueuedMaterial(GameObject prefab, int queue)
+    {
+        Renderer rend = prefab != null ? prefab.GetComponentInChildren<Renderer>() : null;
+        if (rend == null) return null;
+        Material material = new Material(rend.sharedMaterial);
+        material.renderQueue = queue;
+        return material;
+    }
+
+    //床のマテリアルを複製し、アルファを設定の濃さにする（32枚の床で共有する）
+    private Material RailMaterial()
+    {
+        Renderer rend = RailVisualPrefab != null ? RailVisualPrefab.GetComponentInChildren<Renderer>() : null;
+        if (rend == null || !rend.sharedMaterial.HasProperty("_BaseColor")) return null;
+
+        Material material = new Material(rend.sharedMaterial);
+        Color color = material.GetColor("_BaseColor");
+        color.a = PlaySession.LaneOpacityPercent / 100f;
+        material.SetColor("_BaseColor", color);
+        material.renderQueue = RailQueue;
+        return material;
+    }
+
+    //区切り線のマテリアル。白で、アルファをalphaにする
+    //区切り線のプレハブのマテリアルは不透明なので、半透明の判定ラインのマテリアルを元にする
+    private Material LineMaterial(float alpha)
+    {
+        Material material = QueuedMaterial(JudgeLinePrefab, LineQueue);
+        if (material == null || !material.HasProperty("_BaseColor")) return null;
+        material.SetColor("_BaseColor", new Color(1f, 1f, 1f, alpha));
+        //光の反射は透明度に関係なく足されるので、薄くしても白く見えてしまう。反射を弱めて透明度どおりの濃さにする
+        material.SetFloat("_Smoothness", 0f);
+        return material;
     }
 
 
+    //押したレーンに出るキービーム。判定ラインから奥へ、選曲画面で設定した長さ（レーンの長さに対する%）だけ伸ばす
+    //プレハブの箱の代わりにBeamMeshの板を使い、BeamTextureで上に凸の形にして奥ほど薄くする
     private void BuildLights()
     {
-        if (LaneLightPrefab == null) return;
+        if (LaneLightPrefab == null || PlaySession.KeyBeamPercent <= 0) return;
+
+        float length = LaneLayout.LaneLength * PlaySession.KeyBeamPercent / 100f;
+        Mesh mesh = BeamMesh();
+        Material material = QueuedMaterial(LaneLightPrefab, BeamQueue);
+        if (material != null)
+        {
+            material.SetTexture("_BaseMap", BeamTexture());
+            material.SetFloat("_Cull", 0f);//板の裏表を気にしなくていいように両面を描く
+        }
 
         for (int lane = 0; lane < InputManager.LaneCount; lane++)
         {
             GameObject obj = Instantiate(LaneLightPrefab, transform);
             obj.name = $"LaneLight_{lane}";
-            //boundsで幅を測るので、傾ける前に幅を合わせる
-            FitWidth(obj, LaneLayout.LaneWidth);
-            FitDepth(obj, LaneLayout.LaneLength);
-            PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));//レーンの中心
+            obj.GetComponentInChildren<MeshFilter>().sharedMesh = mesh;
+            if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
+
+            //板は幅・奥行きとも1なので、スケールがそのまま幅・長さになる。判定ライン(z=0)から奥(-z)へ伸ばす
+            Transform t = obj.transform;
+            t.localScale = new Vector3(LaneLayout.LaneWidth, t.localScale.y, length);
+            t.localPosition = new Vector3(t.localPosition.x, t.localPosition.y, -length / 2f);
+            PlaceOnSurface(t, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));//レーンの中心
 
             railfade fade = obj.GetComponentInChildren<railfade>();
             if (fade != null) fade.laneIndex = lane;
         }
     }
 
+    //区切り線は、選曲画面で設定したレーン数ごとに引く（濃さも設定どおり）
+    //底面と斜面の境目・斜面の端の線（境界線）は設定に関係なく、太く濃い線で常に引く
     private void BuildLines()
     {
         if (LaneLinePrefab == null) return;
+        Material lineMaterial = LineMaterial(PlaySession.LineOpacityPercent / 100f * maxLineAlpha);
+        Material boundaryMaterial = LineMaterial(boundaryLineAlpha);
+        int division = PlaySession.LineOpacityPercent > 0 ? PlaySession.LineDivision : 0;//0なら区切り線を引かない
 
         //両端を含めてLaneCount+1本
         for (int i = 0; i <= InputManager.LaneCount; i++)
         {
+            bool isBoundary = i == 0 || i == InputManager.LaneCount || i == LaneLayout.LeftFold || i == LaneLayout.RightFold;
+            if (!isBoundary && (division <= 0 || i % division != 0)) continue;
+
             GameObject obj = Instantiate(LaneLinePrefab, transform);
             obj.name = $"LaneLine_{i}";
+            Material material = isBoundary ? boundaryMaterial : lineMaterial;
+            if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             //壁より奥（ノーツが見えない所）には区切り線を引かない
             FitDepth(obj, LaneLayout.VisibleLength);
             //折れ目の線は両側の面の中間の角度にする
             PlaceOnSurface(obj.transform, i, LaneLayout.BoundaryAngle(i));
 
-            if (thickLineInterval > 0 && i % thickLineInterval == 0)
-            {
-                Vector3 scale = obj.transform.localScale;
-                scale.x *= thickLineScale;
-                obj.transform.localScale = scale;
-            }
+            //境界線は一番太く、thickLineIntervalごとの線はその次に太くする
+            float lineScale = 1f;
+            if (isBoundary) lineScale = foldLineScale;
+            else if (thickLineInterval > 0 && i % thickLineInterval == 0) lineScale = thickLineScale;
+            Vector3 scale = obj.transform.localScale;
+            scale.x *= lineScale;
+            obj.transform.localScale = scale;
         }
     }
 
     //判定ラインや床は1本のCubeだと折り曲げられないので、1レーンずつ並べて面に沿わせる
     //fitDepth: 奥行きをレーンの長さに合わせるか（床はtrue、判定ラインはfalse）
-    private void BuildPerLane(GameObject prefab, string name, bool fitDepth)
+    //sideMaterial / bottomMaterial: 斜面・底面でプレハブのマテリアルの代わりに使うマテリアル（nullならプレハブのまま）
+    private void BuildPerLane(GameObject prefab, string name, bool fitDepth, Material sideMaterial = null, Material bottomMaterial = null)
     {
         if (prefab == null) return;
 
@@ -82,6 +168,9 @@ public class LaneFieldBuilder : MonoBehaviour
         {
             GameObject obj = Instantiate(prefab, transform);
             obj.name = $"{name}_{lane}";
+            bool isBottom = lane >= LaneLayout.LeftFold && lane < LaneLayout.RightFold;
+            Material material = isBottom ? bottomMaterial : sideMaterial;
+            if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             FitWidth(obj, LaneLayout.LaneWidth);
             if (fitDepth) FitDepth(obj, LaneLayout.LaneLength);
             PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));
@@ -90,7 +179,7 @@ public class LaneFieldBuilder : MonoBehaviour
 
     //見えるところと見えないところの境目（壁）の線。判定ラインのプレハブを細くして、判定ラインと同じく1レーンずつ並べる
     //壁が0%（全部見える）なら引かない
-    private void BuildWallLine()
+    private void BuildWallLine(Material material)
     {
         if (JudgeLinePrefab == null || PlaySession.WallPercent <= 0) return;
 
@@ -98,11 +187,54 @@ public class LaneFieldBuilder : MonoBehaviour
         {
             GameObject obj = Instantiate(JudgeLinePrefab, transform);
             obj.name = $"WallLine_{lane}";
+            if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             FitWidth(obj, LaneLayout.LaneWidth);
             obj.transform.localScale = Vector3.Scale(obj.transform.localScale, new Vector3(1, 1, wallLineThickness));
             obj.transform.localPosition += new Vector3(0, 0, -LaneLayout.VisibleLength);//PlaceOnSurfaceはzをそのまま使う
             PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));
         }
+    }
+
+    //キービームの板。幅・奥行き1の上面だけの板で、高さはプレハブの箱の上面(y=0.5)に合わせる
+    //uはレーンの幅方向(0〜1)、vは判定ライン側が0で奥が1
+    private static Mesh BeamMesh()
+    {
+        var mesh = new Mesh { name = "KeyBeam" };
+        mesh.vertices = new[]
+        {
+            new Vector3(-0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f),//判定ライン側
+            new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f),//奥側
+        };
+        mesh.uv = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) };
+        mesh.triangles = new[] { 0, 1, 3, 0, 3, 2 };
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
+    //キービームの形。レーンの中央ほど奥まで伸びる上に凸の放物線で、奥ほど薄くなる白いテクスチャ
+    //  奥  ...▁▂▃▂▁...
+    //      .▂▄▆▇▆▄▂.
+    //  手前█████████   ← 判定ライン
+    private static Texture2D BeamTexture()
+    {
+        const int width = 32, height = 64;
+        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false) { name = "KeyBeam", wrapMode = TextureWrapMode.Clamp };
+        var pixels = new Color[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            float v = (y + 0.5f) / height;
+            for (int x = 0; x < width; x++)
+            {
+                float u = (x + 0.5f) / width;
+                float reach = 1f - (2f * u - 1f) * (2f * u - 1f);//この位置でビームが届く奥行き（中央で1、両端で0）
+                float alpha = reach > 0f ? Mathf.Clamp01(1f - v / reach) : 0f;
+                pixels[y * width + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+        texture.SetPixels(pixels);
+        texture.Apply();
+        return texture;
     }
 
     //レーン位置laneの面上に置き、angle度だけ傾ける

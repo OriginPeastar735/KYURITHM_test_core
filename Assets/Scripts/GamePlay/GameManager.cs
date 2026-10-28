@@ -23,6 +23,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private ResultScreen resultScreen;//全ノーツが消えたらこのパネルを割り込ませてリザルトを出す
     [SerializeField] private GameObject hideOnResult;//リザルトが出ると同時に非アクティブにするもの（プレイ中だけ使うCanvasなど）
 
+    [SerializeField] private Renderer background;//プレイ中の背景（未設定ならメインカメラの子から探す）
+
     [Header("FAST/LATE表示（選曲画面の設定がONのときだけ、コンボ表示を複製して作る）")]
     [SerializeField] private Vector2 fastLateOffset = new Vector2(0f, -0.4f);//コンボ表示からの位置
     [SerializeField] private float fastLateFontSize = 0.25f;
@@ -43,6 +45,20 @@ public class GameManager : MonoBehaviour
 
         if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
         JudgeTextDisplay.Create(ComboText.font);
+        ApplyBackgroundBrightness();
+    }
+
+    //選曲画面で設定した明るさ(%)を背景の色に掛けて暗くする（マテリアルはこのシーンだけの複製を変える）
+    void ApplyBackgroundBrightness()
+    {
+        Renderer bg = background;
+        if (bg == null && Camera.main != null) bg = Camera.main.GetComponentInChildren<Renderer>();
+        if (bg == null || !bg.sharedMaterial.HasProperty("_BaseColor")) return;
+
+        float brightness = PlaySession.BackgroundBrightnessPercent / 100f;
+        Material material = bg.material;
+        Color color = material.GetColor("_BaseColor");
+        material.SetColor("_BaseColor", new Color(color.r * brightness, color.g * brightness, color.b * brightness, color.a));
     }
 
     // Update is called once per frame

@@ -15,6 +15,7 @@ public class Hold : MonoBehaviour
     public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
     private float presentBar;//楽曲の現在の小節位置
     public bool judged = false;//判定（PRECISE+, PRECISE...）が下されたかの変数。現在は未使用（判定済みのノーツはDeleteで消しているため）
+    private float frontOffset;//ノーツの中心から手前の面までの距離
 
     public void Init(float noteBar, float expectedTime, int lane, int width)
     {
@@ -31,6 +32,7 @@ public class Hold : MonoBehaviour
         LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
         NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、中心に線を入れる
         shape.SetRange(lane, width, 0.01f);
+        frontOffset = shape.Depth / 2f;
 
         //自身はz方向に動かすだけなので原点に置く
         transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
@@ -48,7 +50,7 @@ public class Hold : MonoBehaviour
 
         //ノーツ自身のローカル座標を指定（浮かせる高さはInitでLaneSurfaceShapeに渡している）
         Vector3 local = transform.localPosition;
-        local.z = z;
+        local.z = z - frontOffset;//手前の面が判定ラインに触れたときが判定のタイミング
         transform.localPosition = local;
 
         //壁より遠いノーツは表示しない（zは判定前はマイナスなので、-VisibleLengthより小さければ奥）
