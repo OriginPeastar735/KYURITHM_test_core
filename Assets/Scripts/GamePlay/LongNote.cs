@@ -43,6 +43,7 @@ public class LongNote : MonoBehaviour
     [Header("Section")]
     public bool isFirstSection = true;//slideの最初のセクションか（始点をタップで判定する）。分岐の接続点から始まる場合はfalse
     public bool isLastSection = true;//slideの最後のセクションか
+    private bool showEndNote = true;//終点ノーツを表示するか（分岐の終点が親の中間ノーツにつながる場合はfalse）
 
     [HideInInspector] public List<float> checkpointTimes = new List<float>();//slide中の判定点の時刻
     [HideInInspector] public int nextCheckpoint = 0;//次に判定する判定点の番号
@@ -98,6 +99,7 @@ public class LongNote : MonoBehaviour
         this.endWidth = endWidth;
         this.isFirstSection = isFirstSection;
         this.isLastSection = isLastSection;
+        this.showEndNote = showEndNote;
 
         //親は原点に置き、x位置は子オブジェクト側で決める
         transform.localPosition = Vector3.zero;
@@ -171,7 +173,15 @@ public class LongNote : MonoBehaviour
 
         transform.localPosition = Vector3.zero;
 
+        //壁の位置の小節位置。これより奥の部分は表示しない
+        float farBar = presentBar + LaneLayout.VisibleLength / scrollSpeed;
+        //始点まで奥端より遠いうちは、まるごと表示しない
+        bool visible = startBar <= farBar;
+        if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
+        if (!visible) return;
+
         float t0 = 0f;//帯を描き始める進み具合
+        float t1 = Mathf.Min(1f, Mathf.InverseLerp(startBar, endBar, farBar));//帯を描き終える進み具合（奥端で切る）
 
         if(state == LongNoteState.Holding)
         {
@@ -195,12 +205,17 @@ public class LongNote : MonoBehaviour
         }
         if(EndNote != null)
         {
-            EndNote.localPosition = new Vector3(0, 0, endZ);
-            endShape.SetRange(endLane, endWidth, 0.01f);
+            bool showEnd = showEndNote && endBar <= farBar;
+            if (EndNote.gameObject.activeSelf != showEnd) EndNote.gameObject.SetActive(showEnd);
+            if (showEnd)
+            {
+                EndNote.localPosition = new Vector3(0, 0, endZ);
+                endShape.SetRange(endLane, endWidth, 0.01f);
+            }
         }
         if(bodyMesh != null)
         {
-            UpdateBodyMesh(t0);
+            UpdateBodyMesh(t0, t1);
         }
 
         //押している間のエフェクトを判定ライン上の現在位置に追従させる
@@ -253,15 +268,15 @@ public class LongNote : MonoBehaviour
         bodyMesh.triangles = triangles;
     }
 
-    //進み具合t0から終点までの帯を、曲線に沿って頂点を並べて描く
-    private void UpdateBodyMesh(float t0)
+    //進み具合t0からt1までの帯を、曲線に沿って頂点を並べて描く
+    private void UpdateBodyMesh(float t0, float t1)
     {
         const float y = 0.01f;
         int segments = bodyVertices.Length / BodyColumns - 1;
 
         for (int i = 0; i <= segments; i++)
         {
-            float t = Mathf.Lerp(t0, 1f, (float)i / segments);
+            float t = Mathf.Lerp(t0, t1, (float)i / segments);
             //zは時間に比例（一定速度でスクロール）、レーン位置は曲線に沿って変化する
             float z = Mathf.Min((presentBar - Mathf.Lerp(startBar, endBar, t)) * scrollSpeed, startZ);
             GetLaneRangeAtProgress(t, out float lane, out float width);

@@ -1484,7 +1484,7 @@ MonoBehaviour:
   LongNotePrefab: {fileID: 5005022140305346290}
   bpm: 158
   totalCombo: 0
-  speedPerHiSpeed: 2
+  speedPerHiSpeed: 6
   destroyedNotesCount: 0
   barPertick: 1920
   notes: []

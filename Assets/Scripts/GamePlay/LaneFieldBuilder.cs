@@ -14,15 +14,20 @@ public class LaneFieldBuilder : MonoBehaviour
 
     public int thickLineInterval = 4;//この本数ごとに区切り線を太くする（キー単位）
     public float thickLineScale = 2f;//太い区切り線の太さ倍率
+    public float laneLength = 40f;//判定ラインからレーンの奥端までの長さ。これより奥のノーツは表示しない
+    public float wallLineThickness = 2f / 3f;//壁の線の太さ（判定ラインの太さに対する割合）
 
     void Awake()
     {
+        LaneLayout.LaneLength = laneLength;
+
         //プレイ開始時にレーンを構築する。
         //ライトは1レーンに1つで32個、区切り線は両端を含むので33本をプレハブから生成する
         BuildLights();
         BuildLines();
-        BuildPerLane(JudgeLinePrefab, "JudgeLine");
-        BuildPerLane(RailVisualPrefab, "RailVisual");
+        BuildPerLane(JudgeLinePrefab, "JudgeLine", false);
+        BuildPerLane(RailVisualPrefab, "RailVisual", true);
+        BuildWallLine();
     }
 
 
@@ -36,6 +41,7 @@ public class LaneFieldBuilder : MonoBehaviour
             obj.name = $"LaneLight_{lane}";
             //boundsで幅を測るので、傾ける前に幅を合わせる
             FitWidth(obj, LaneLayout.LaneWidth);
+            FitDepth(obj, LaneLayout.LaneLength);
             PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));//レーンの中心
 
             railfade fade = obj.GetComponentInChildren<railfade>();
@@ -52,6 +58,8 @@ public class LaneFieldBuilder : MonoBehaviour
         {
             GameObject obj = Instantiate(LaneLinePrefab, transform);
             obj.name = $"LaneLine_{i}";
+            //壁より奥（ノーツが見えない所）には区切り線を引かない
+            FitDepth(obj, LaneLayout.VisibleLength);
             //折れ目の線は両側の面の中間の角度にする
             PlaceOnSurface(obj.transform, i, LaneLayout.BoundaryAngle(i));
 
@@ -65,7 +73,8 @@ public class LaneFieldBuilder : MonoBehaviour
     }
 
     //判定ラインや床は1本のCubeだと折り曲げられないので、1レーンずつ並べて面に沿わせる
-    private void BuildPerLane(GameObject prefab, string name)
+    //fitDepth: 奥行きをレーンの長さに合わせるか（床はtrue、判定ラインはfalse）
+    private void BuildPerLane(GameObject prefab, string name, bool fitDepth)
     {
         if (prefab == null) return;
 
@@ -74,6 +83,24 @@ public class LaneFieldBuilder : MonoBehaviour
             GameObject obj = Instantiate(prefab, transform);
             obj.name = $"{name}_{lane}";
             FitWidth(obj, LaneLayout.LaneWidth);
+            if (fitDepth) FitDepth(obj, LaneLayout.LaneLength);
+            PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));
+        }
+    }
+
+    //見えるところと見えないところの境目（壁）の線。判定ラインのプレハブを細くして、判定ラインと同じく1レーンずつ並べる
+    //壁が0%（全部見える）なら引かない
+    private void BuildWallLine()
+    {
+        if (JudgeLinePrefab == null || PlaySession.WallPercent <= 0) return;
+
+        for (int lane = 0; lane < InputManager.LaneCount; lane++)
+        {
+            GameObject obj = Instantiate(JudgeLinePrefab, transform);
+            obj.name = $"WallLine_{lane}";
+            FitWidth(obj, LaneLayout.LaneWidth);
+            obj.transform.localScale = Vector3.Scale(obj.transform.localScale, new Vector3(1, 1, wallLineThickness));
+            obj.transform.localPosition += new Vector3(0, 0, -LaneLayout.VisibleLength);//PlaceOnSurfaceはzをそのまま使う
             PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));
         }
     }
@@ -107,5 +134,24 @@ public class LaneFieldBuilder : MonoBehaviour
         Vector3 scale = obj.transform.localScale;
         scale.x *= width / currentWidth;
         obj.transform.localScale = scale;
+    }
+
+    //奥の端が z = -farLength になるようにz方向のスケールと位置を合わせる（手前の端はプレハブのまま）
+    //FitWidthと同じくboundsで測るので、傾ける前に呼ぶ
+    private void FitDepth(GameObject obj, float farLength)
+    {
+        Renderer rend = obj.GetComponentInChildren<Renderer>();
+        if (rend == null) return;
+
+        Bounds bounds = rend.bounds;
+        if (bounds.size.z <= 0) return;
+        float nearZ = bounds.max.z;//手前の端（ノーツは-z側から流れてくるので、+z側が手前）
+
+        Vector3 scale = obj.transform.localScale;
+        scale.z *= (nearZ + farLength) / bounds.size.z;
+        obj.transform.localScale = scale;
+
+        //スケールを変えると中心を基準に伸び縮みして手前の端がずれるので、元の位置に戻す
+        obj.transform.localPosition += new Vector3(0, 0, nearZ - rend.bounds.max.z);
     }
 }

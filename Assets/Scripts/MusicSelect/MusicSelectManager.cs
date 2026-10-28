@@ -47,6 +47,7 @@ public class MusicSelectManager : MonoBehaviour
     public float moveInterval = 0.12f;//楽曲移動の最短間隔。連打してもこれより速くは動かない
     public float holdRepeatDelay = 0.3f;//長押ししてから連続移動が始まるまでの時間
     public float holdRepeatInterval = 0.12f;//長押し中の連続移動の間隔
+    public float settingRepeatInterval = 0.05f;//設定の −/+ を長押ししているときの連続変更の間隔
     public float switchInterval = 0.2f;//難易度・ソート切り替え、画面の切り替えの最短間隔
     public float startInputLock = 0.5f;//シーン開始直後に入力を受け付けない時間（前の画面からの押しっぱなし対策）
     public float sortPopupDuration = 2.5f;//ソートのポップアップを最後の操作から何秒出しておくか
@@ -71,6 +72,8 @@ public class MusicSelectManager : MonoBehaviour
         public Func<string> value;//表示する値
         public Func<int, bool> canChange;//-1/+1の方向に変えられるか
         public Action<int> change;//-1/+1の方向に変える
+        public string minusLabel = "−";//右斜面の −/+ のエリアに出す文字（ON/OFFの設定ではOFF/ONにする）
+        public string plusLabel = "+";
     }
 
     private List<SongData> songs;
@@ -98,6 +101,7 @@ public class MusicSelectManager : MonoBehaviour
     private readonly bool[] prevHeld = new bool[ZoneCount];
     private float nextMoveTime;//次に移動してよい時刻
     private float nextRepeatTime;//長押しで次に移動する時刻
+    private float nextSettingRepeatTime;//長押しで次に設定を変える時刻
     private float nextSwitchTime;//次に切り替えてよい時刻
 
     void Start()
@@ -119,7 +123,8 @@ public class MusicSelectManager : MonoBehaviour
         }
         ApplyHighScores();
         foreach (var song in songs) maxDifficulty = Mathf.Max(maxDifficulty, song.difficulties.Count - 1);
-        ApplySort();
+        if (PlaySession.HasLastSelection) RestoreLastSelection();
+        else ApplySort();
         settings = CreateSettings();
 
         view = gameObject.AddComponent<MusicSelectView>();
@@ -223,7 +228,7 @@ public class MusicSelectManager : MonoBehaviour
         }
     }
 
-    //右斜面の −/+ で値を変える。戻る・決定で楽曲カード・設定カードの画面に戻る
+    //右斜面の −/+ で値を変える（長押しで連続して変わる）。戻る・決定で楽曲カード・設定カードの画面に戻る
     void HandleSettings()
     {
         if (BackPressed || Pressed(SelectZone.Decide))
@@ -232,8 +237,31 @@ public class MusicSelectManager : MonoBehaviour
             return;
         }
         HandleMove();
-        if (Pressed(SelectZone.DiffDown)) TrySwitch(() => ChangeSetting(-1));
-        if (Pressed(SelectZone.DiffUp)) TrySwitch(() => ChangeSetting(1));
+        int dir = RepeatDirection(SelectZone.DiffDown, SelectZone.DiffUp, ref nextSettingRepeatTime, settingRepeatInterval);
+        if (dir != 0) ChangeSetting(dir);
+    }
+
+    // ===== 長押しの連続操作 =====
+    //minus/plusのエリアを、押した瞬間に1回、押し続けるとholdRepeatDelay後からinterval毎に繰り返し操作する
+    //このフレームで操作する向き(-1/+1)を返す。操作しないフレームは0
+    int RepeatDirection(SelectZone minus, SelectZone plus, ref float nextRepeat, float interval)
+    {
+        bool minusHeld = held[(int)minus];
+        bool plusHeld = held[(int)plus];
+        if (minusHeld == plusHeld) return 0;//どちらも押していない、または両方押している
+
+        int dir = plusHeld ? 1 : -1;
+        if (Pressed(plusHeld ? plus : minus))
+        {
+            nextRepeat = Time.time + holdRepeatDelay;
+            return dir;
+        }
+        if (Time.time >= nextRepeat)
+        {
+            nextRepeat = Time.time + interval;
+            return dir;
+        }
+        return 0;
     }
 
     // ===== カードの左右移動 =====
@@ -241,21 +269,8 @@ public class MusicSelectManager : MonoBehaviour
     //連打・長押しどちらでもmoveIntervalより速くは動かない
     void HandleMove()
     {
-        bool left = held[(int)SelectZone.Left];
-        bool right = held[(int)SelectZone.Right];
-        if (left == right) return;//どちらも押していない、または両方押している
-
-        int dir = right ? 1 : -1;
-        if (Pressed(right ? SelectZone.Right : SelectZone.Left))
-        {
-            nextRepeatTime = Time.time + holdRepeatDelay;
-            TryMove(dir);
-        }
-        else if (Time.time >= nextRepeatTime)
-        {
-            nextRepeatTime = Time.time + holdRepeatInterval;
-            TryMove(dir);
-        }
+        int dir = RepeatDirection(SelectZone.Left, SelectZone.Right, ref nextRepeatTime, holdRepeatInterval);
+        if (dir != 0) TryMove(dir);
     }
 
     void TryMove(int dir)
@@ -312,6 +327,16 @@ public class MusicSelectManager : MonoBehaviour
         });
     }
 
+    //前の曲を選んだときのソート・難易度にし、遊んだ曲（ランダム選曲なら抽選された曲）を選んだ状態にする
+    void RestoreLastSelection()
+    {
+        sortMode = (SortMode)Mathf.Clamp(PlaySession.SortMode, 0, sortNames.Length - 1);
+        difficulty = Mathf.Clamp(PlaySession.Difficulty, 0, maxDifficulty);
+        ApplySort();
+        int index = order.FindIndex(i => songs[i].id == PlaySession.MusicIndex);
+        if (index >= 0) position = index;
+    }
+
     //プレイ画面で記録したハイスコアを曲リストに反映する（記録の無い譜面は読み込んだときの値のまま）
     void ApplyHighScores()
     {
@@ -333,6 +358,8 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.MusicIndex = song.id;
         PlaySession.Difficulty = difficulty;
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
+        PlaySession.SortMode = (int)sortMode;
+        PlaySession.HasLastSelection = true;
         PlaySession.AudioPath = song.audioPath;
         CloseSortPopup();
         view.PlayDecide();
@@ -354,8 +381,9 @@ public class MusicSelectManager : MonoBehaviour
         view.SetZoneLabel(SelectZone.Right, "右 →");
         view.SetZoneLabel(SelectZone.Decide, selecting ? "決定" : phase == Phase.Settings ? "OK" : position == 0 ? "START" : "設定");
         view.SetSlopeTitle(false, phase == Phase.Settings ? "設定変更" : "難易度切り替え");
-        view.SetZoneLabel(SelectZone.DiffDown, "−");
-        view.SetZoneLabel(SelectZone.DiffUp, "+");
+        SettingItem setting = phase == Phase.Settings ? settings[position] : null;
+        view.SetZoneLabel(SelectZone.DiffDown, setting != null ? setting.minusLabel : "−");
+        view.SetZoneLabel(SelectZone.DiffUp, setting != null ? setting.plusLabel : "+");
 
         view.SetZoneEnabled(SelectZone.Left, CanMove(-1));
         view.SetZoneEnabled(SelectZone.Right, CanMove(1));
@@ -500,8 +528,17 @@ public class MusicSelectManager : MonoBehaviour
                 name = "ハイスピード",
                 description = "ノーツが流れてくる速さ",
                 value = () => PlaySession.HiSpeed.ToString("0.0"),
-                canChange = d => d < 0 ? PlaySession.HiSpeed > 1f : PlaySession.HiSpeed < 10f,
-                change = d => PlaySession.HiSpeed = Mathf.Clamp(PlaySession.HiSpeed + d * 0.5f, 1f, 10f),
+                //1.0〜12.0を0.1刻み。0.1を足し続けると誤差が溜まるので、毎回小数第1位に丸める
+                canChange = d => d < 0 ? PlaySession.HiSpeed > 1.05f : PlaySession.HiSpeed < 11.95f,
+                change = d => PlaySession.HiSpeed = Mathf.Clamp(Mathf.Round((PlaySession.HiSpeed + d * 0.1f) * 10f) / 10f, 1f, 12f),
+            },
+            new SettingItem
+            {
+                name = "壁",
+                description = "レーンの奥側を見えなくする（0%で全部見える）",
+                value = () => $"{PlaySession.WallPercent}%",
+                canChange = d => d < 0 ? PlaySession.WallPercent > 0 : PlaySession.WallPercent < 100,
+                change = d => PlaySession.WallPercent = Mathf.Clamp(PlaySession.WallPercent + d, 0, 100),
             },
             new SettingItem
             {
@@ -518,6 +555,8 @@ public class MusicSelectManager : MonoBehaviour
                 value = () => PlaySession.ShowFastLate ? "ON" : "OFF",
                 canChange = d => d < 0 ? PlaySession.ShowFastLate : !PlaySession.ShowFastLate,
                 change = d => PlaySession.ShowFastLate = d > 0,
+                minusLabel = "OFF",
+                plusLabel = "ON",
             },
         };
     }
@@ -595,7 +634,7 @@ public class MusicSelectManager : MonoBehaviour
             //中央の値に比べて小さくなりすぎないよう、説明文は大きめにする
             title = item.description,
             titleSize = 32,
-            subtitle = "右斜面の − / + で変更",
+            subtitle = $"右斜面の {item.minusLabel} / {item.plusLabel} で変更",
             subtitleSize = 28,
         };
     }

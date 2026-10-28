@@ -15,6 +15,9 @@ public static class LaneLayout
     public static int SideLaneCount = 8;//左右それぞれの傾斜レーンの本数
     [SerializeField]
     public static float SlopeAngle = 60f;//傾斜レーンが真ん中のレーンとなす角度（度）
+    public static float LaneLength = 40f;//判定ラインからレーンの奥端までの長さ。LaneFieldBuilderのInspectorの値で上書きされる
+    //判定ラインから壁（ノーツが見え始める位置）までの距離。選曲画面の設定で、レーンの奥側から何%を見えなくするか決める
+    public static float VisibleLength => LaneLength * (100 - PlaySession.WallPercent) / 100f;
 
     public static float LaneWidth => FieldWidth / InputManager.LaneCount;
     //=>は「読むたびに右辺を計算し直すプロパティ」（ポインタではなく、中身は計算する関数）。

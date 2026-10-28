@@ -20,6 +20,8 @@ public class JudgeManager : MonoBehaviour
     public static event Action Miss;
     //タイミングで判定するノーツ（tap・slide始点）がPRECISE/APPROXだったときに、ずれ(秒)を通知する。負なら早い(FAST)
     public static event Action<float> FastLate;
+    //判定が出たときに、判定の種類とノーツの中心レーン位置を通知する（ノーツの上に判定を表示するのに使う）
+    public static event Action<JudgeResult, float> Judged;
 
     //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
@@ -279,6 +281,7 @@ public class JudgeManager : MonoBehaviour
     void ShowResult(JudgeResult result, float centerLane, float diffSec)
     {
         Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
+        Judged?.Invoke(result, centerLane);
         switch (result)
         {
             case JudgeResult.PrecisePlus:

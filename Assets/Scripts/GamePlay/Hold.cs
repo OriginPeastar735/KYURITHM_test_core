@@ -51,6 +51,9 @@ public class Hold : MonoBehaviour
         local.z = z;
         transform.localPosition = local;
 
+        //壁より遠いノーツは表示しない（zは判定前はマイナスなので、-VisibleLengthより小さければ奥）
+        bool visible = z >= -LaneLayout.VisibleLength;
+        if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
     }
 
     //ノーツ自身の削除を行う

@@ -19,7 +19,7 @@ public class NoteManager : MonoBehaviour
     public int totalCombo = 0;
 
     [Header("ハイスピード")]
-    public float speedPerHiSpeed = 2f;//ハイスピード1あたり、ノーツが1秒に進む距離（ハイスピード5で10）
+    public float speedPerHiSpeed = 6f;//ハイスピード1あたり、ノーツが1秒に進む距離（ハイスピード5で30）
     [System.NonSerialized] public float scrollSpeed;//基本BPMの1小節あたりに進む距離。LoadJsonで選曲画面のハイスピードから計算する
 
     [Header("ノーツの見た目（長さはノーツの奥行きに対する割合）")]

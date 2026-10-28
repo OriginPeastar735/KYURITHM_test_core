@@ -42,6 +42,7 @@ public class GameManager : MonoBehaviour
         totalCombo = NoteManager.instance.totalCombo;
 
         if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
+        JudgeTextDisplay.Create(ComboText.font);
     }
 
     // Update is called once per frame
