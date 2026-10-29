@@ -4,7 +4,7 @@ using UnityEngine.SceneManagement;
 
 public static class SceneLoader
 {
-    public static GameScene CurrentScene { get; private set; }//外部から参照はできるが，書き込みはできない
+    public static GameScene CurrentScene { get; private set; }//今のシーン（書き換えはこのクラスの中だけで行う）
 
     public static void ChangeScene(GameScene next)
     {
@@ -26,6 +26,10 @@ public static class SceneLoader
 
             case GameScene.Result:
                 SceneManager.LoadScene("Result");
+                break;
+
+            case GameScene.Ending:
+                SceneManager.LoadScene("Ending");
                 break;
         }
     }

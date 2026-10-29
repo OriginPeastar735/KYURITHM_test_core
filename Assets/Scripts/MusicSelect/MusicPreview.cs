@@ -39,7 +39,7 @@ public class MusicPreview : MonoBehaviour
     {
         if (wantedPath != loadedPath)
         {
-            //今の曲を少しで消してから、次の曲を読み込む
+            //今の曲をswitchFadeSeconds秒でフェードアウトしてから、次の曲を読み込む
             if (source.isPlaying && source.volume > 0f)
             {
                 source.volume = Mathf.MoveTowards(source.volume, 0f, volume / switchFadeSeconds * Time.deltaTime);

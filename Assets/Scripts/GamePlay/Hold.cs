@@ -8,13 +8,13 @@ using UnityEngine;
 public class Hold : MonoBehaviour
 {
     public float noteBar;//ノーツの小節位置
-    public float scrollSpeed = 1000f;//スクロール定数
-    public float expectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
+    public float scrollSpeed = 1000f;//1小節あたりに進む距離（NoteManagerがハイスピードから設定する）
+    public float expectedTime;//判定ラインに来る時刻（曲の再生時間、秒）
     public int lane;//ノーツの始点レーン
     public int width;//ノーツが占めるレーン数
     public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
     private float presentBar;//楽曲の現在の小節位置
-    public bool judged = false;//判定（PRECISE+, PRECISE...）が下されたかの変数。現在は未使用（判定済みのノーツはDeleteで消しているため）
+    public bool judged = false;//判定済みか（判定済みのノーツはDeleteで消すので参照していない）
     private float frontOffset;//ノーツの中心から手前の面までの距離
 
     public void Init(float noteBar, float expectedTime, int lane, int width)
@@ -30,20 +30,20 @@ public class Hold : MonoBehaviour
         //x,yと傾きはLaneSurfaceShapeが子の板で作る（傾斜の折れ目をまたぐ場合は折れ目で分割される）
         //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
         LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
-        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、中心に線を入れる
+        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、縁と中心の線を付ける
         shape.SetRange(lane, width, 0.01f);
         frontOffset = shape.Depth / 2f;
 
         //自身はz方向に動かすだけなので原点に置く
-        transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
+        transform.localPosition = Vector3.zero;
     }
 
+    //現在の小節位置に合わせてz位置を動かし、壁より奥なら非表示にする（NoteManagerが毎フレーム呼ぶ）
     public void UpdatePosition(float presentBar)
     {
-        //毎フレーム実行される関数なので現在の小節位置が常に更新される
         this.presentBar = presentBar;
 
-        //現在の小節位置とノーツ自身の小節位置のギャップ×scrollSpeed(ユーザー設定)。
+        //判定ラインからの距離 = (現在の小節位置 - ノーツの小節位置) × scrollSpeed
         //zは判定前はマイナスで、判定タイミングでちょうど0(判定ライン)になる。
         //scrollSpeedが大きいほど遠くに置かれ、その分速く流れてくるように見える。
         float z = (presentBar - noteBar) * scrollSpeed;
@@ -58,10 +58,10 @@ public class Hold : MonoBehaviour
         if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
     }
 
-    //ノーツ自身の削除を行う
+    //NoteManagerのリストから外してオブジェクトを消す
     public void Delete()
     {
-        NoteManager.instance.RemoveHold(this);//自身をListから削除
-        Destroy(gameObject);//オブジェクト自体を削除
+        NoteManager.instance.RemoveHold(this);
+        Destroy(gameObject);
     }
 }

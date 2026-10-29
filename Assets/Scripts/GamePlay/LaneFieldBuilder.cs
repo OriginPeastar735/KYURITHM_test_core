@@ -2,12 +2,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-//起動時にレーンごとのライトと区切り線（と判定ライン）をLaneLayoutに合わせて生成する
+//起動時にキービーム・区切り線・判定ライン・床・壁の線をLaneLayoutに合わせて生成する
 //左右の傾斜レーンの分は、面に沿って傾けて置く
 //このオブジェクトはワールド原点(位置0・回転0・スケール1)に置くこと
 public class LaneFieldBuilder : MonoBehaviour
 {
-    public GameObject LaneLightPrefab;//railfadeが付いたライトのプレハブ
+    public GameObject LaneLightPrefab;//キービームのプレハブ（KeyBeamFadeが付いたもの）
     public GameObject LaneLinePrefab;//区切り線のプレハブ
     public GameObject JudgeLinePrefab;//判定ラインのプレハブ（未設定なら生成しない）。傾斜に沿うよう1レーンずつ並べる
     public GameObject RailVisualPrefab;//レーンの床のプレハブ（未設定なら生成しない）。判定ラインと同じく1レーンずつ並べる
@@ -35,8 +35,6 @@ public class LaneFieldBuilder : MonoBehaviour
         Camera cam = Camera.main;
         if (cam != null && cam.GetComponent<SensorCameraFit>() == null) cam.gameObject.AddComponent<SensorCameraFit>();
 
-        //プレイ開始時にレーンを構築する。
-        //ライトは1レーンに1つで32個、区切り線は両端を含むので33本をプレハブから生成する
         BuildLights();
         BuildLines();
         Material judgeMaterial = QueuedMaterial(JudgeLinePrefab, JudgeLineQueue);
@@ -118,7 +116,7 @@ public class LaneFieldBuilder : MonoBehaviour
             t.localPosition = new Vector3(t.localPosition.x, t.localPosition.y, -length / 2f);
             PlaceOnSurface(t, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));//レーンの中心
 
-            railfade fade = obj.GetComponentInChildren<railfade>();
+            KeyBeamFade fade = obj.GetComponentInChildren<KeyBeamFade>();
             if (fade != null) fade.laneIndex = lane;
         }
     }
@@ -255,14 +253,11 @@ public class LaneFieldBuilder : MonoBehaviour
         Renderer rend = obj.GetComponentInChildren<Renderer>();
         if (rend == null) return;
 
-        //boundsは見た目をぴったり囲む箱(バウンディングボックス)。
-        //bounds.size.xは、スケールや親の影響を反映した後の、ワールド空間での実際の横幅
+        //今の見た目の横幅（スケールや親の影響を含むワールド座標）
         float currentWidth = rend.bounds.size.x;
         if (currentWidth <= 0) return;
 
-        //「目標の幅 ÷ 今の幅」が、何倍にすればよいかの倍率になる。
-        //例: 今の幅1.0で目標0.25なら0.25倍、今の幅0.5なら0.5倍 → どちらも結果は0.25
-        //プレハブが元々どんな大きさでも、必ず目標の幅になる
+        //「目標の幅 ÷ 今の幅」倍にするので、プレハブの元の大きさに関係なく目標の幅になる
         Vector3 scale = obj.transform.localScale;
         scale.x *= width / currentWidth;
         obj.transform.localScale = scale;

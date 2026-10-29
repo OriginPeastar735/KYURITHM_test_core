@@ -1,6 +1,7 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using static UIUtil;
 
 //曲が終わったら（曲が最後まで流れ、全ノーツが消えたら）シーンを切り替えずに、Canvas上のパネル画像を割り込ませてリザルトを出す
 //
@@ -8,7 +9,7 @@ using UnityEngine;
 //  2. パネルを画面外からスライドさせながら表示する（slideIn秒）
 //  3. スコアと判定数を0から数え上げる（countUp秒）
 //  4. ハイスコアを出す（更新していたらNEW RECORD）
-//  5. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る。規定の曲数を遊び終えていたらオープニングに戻る
+//  5. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る。規定の曲数を遊び終えていたらResultシーンへ移る
 //
 //panelはCanvasの子に置いた画像(Image)。最初は非表示にしておき、GameManagerからShowで呼び出す
 public class ResultScreen : MonoBehaviour
@@ -80,22 +81,22 @@ public class ResultScreen : MonoBehaviour
         Vector2 shownPos = panel.anchoredPosition;
         panel.gameObject.SetActive(true);
         group.blocksRaycasts = true;
-        yield return MusicSelectView.Animate(slideIn, t =>
+        yield return Animate(slideIn, t =>
         {
-            float e = MusicSelectView.EaseOut(t);
+            float e = EaseOut(t);
             panel.anchoredPosition = shownPos + slideFrom * (1f - e);
             group.alpha = e;
         });
 
         //3. スコアと判定数を同時に数え上げる
-        yield return MusicSelectView.Animate(countUp, t => SetCounts(result, MusicSelectView.EaseOut(t)));
+        yield return Animate(countUp, t => SetCounts(result, EaseOut(t)));
 
         //4. 数え上げが終わってからハイスコアを出す
         SetHighScore(result[0], previousBest);
 
         //5. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
         while (!BackPressed()) yield return null;
-        SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Opening);
+        SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Result);
     }
 
     //初プレイかハイスコア更新ならNEW RECORDと伸びた点数（初プレイは0点からの差）、そうでなければ今までのハイスコアを出す

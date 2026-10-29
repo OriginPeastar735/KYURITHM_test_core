@@ -18,11 +18,7 @@ public static class LaneLayout
     //判定ラインから壁（ノーツが見え始める位置）までの距離。選曲画面の設定で、レーンの奥側から何%を見えなくするか決める
     public static float VisibleLength => LaneLength * (100 - PlaySession.WallPercent) / 100f;
 
-    public static float LaneWidth => FieldWidth / InputManager.LaneCount;
-    //=>は「読むたびに右辺を計算し直すプロパティ」（ポインタではなく、中身は計算する関数）。
-    //{ get { return FieldWidth / InputManager.LaneCount; } } の省略形。
-    //値を保存していないので、FieldWidthを変えると次に読んだ時から新しい値になる。
-    //=で書くと最初に1回計算した値が保存され、後からFieldWidthを変えても変わらない。
+    public static float LaneWidth => FieldWidth / InputManager.LaneCount;//1レーンの幅（読むたびにFieldWidthから計算する）
 
     //水平部分と傾斜部分の境目（折れ目）のレーン位置
     public static float LeftFold => SideLaneCount;//8

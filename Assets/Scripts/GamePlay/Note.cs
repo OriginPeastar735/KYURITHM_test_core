@@ -2,11 +2,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+//tapノーツ。NoteManagerが生成して毎フレーム動かし、JudgeManagerが判定する
 public class Note : MonoBehaviour
 {
     public float noteBar;//ノーツの小節位置
-    public float scrollSpeed = 1000f;//スクロール定数
-    public float expectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
+    public float scrollSpeed = 1000f;//1小節あたりに進む距離（NoteManagerがハイスピードから設定する）
+    public float expectedTime;//判定ラインに来る時刻（曲の再生時間、秒）
     public int lane;//ノーツの始点レーン
     public int width;//ノーツが占めるレーン数
     public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）
@@ -25,13 +26,14 @@ public class Note : MonoBehaviour
         //x,yと傾きはLaneSurfaceShapeが子の板で作るので、自身はz方向に動かすだけ
         //y=0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
         LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
-        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、中心に線を入れる
+        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、縁と中心の線を付ける
         shape.SetRange(lane, width, 0.01f);
         frontOffset = shape.Depth / 2f;
 
-        transform.localPosition = Vector3.zero;//transform.positonはworld基準で座標を指定する。localPositionにすれば親基準の座標を指定できる。
+        transform.localPosition = Vector3.zero;//z位置はUpdatePositionで動かす
     }
 
+    //現在の小節位置に合わせてz位置を動かし、壁より奥なら非表示にする（NoteManagerが毎フレーム呼ぶ）
     public void UpdatePosition(float presentBar)
     {
         this.presentBar = presentBar;
@@ -46,6 +48,7 @@ public class Note : MonoBehaviour
         if (gameObject.activeSelf != visible) gameObject.SetActive(visible);
     }
 
+    //NoteManagerのリストから外してオブジェクトを消す
     public void Delete()
     {
         NoteManager.instance.RemoveNote(this);//自身をListから削除

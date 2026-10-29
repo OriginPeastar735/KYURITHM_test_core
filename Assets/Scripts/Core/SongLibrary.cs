@@ -36,20 +36,35 @@ public static class SongLibrary
         public string audioFileName;
     }
 
+    //LoadAllで読み込んだ曲リスト。曲フォルダは起動中に変わらないので、2回目以降はこれを返す
+    static List<SongData> cachedSongs;
+
+    //エディタで「ドメインのリロード」を切っていても、再生を始めるたびに曲フォルダを読み直す
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ClearCache()
+    {
+        cachedSongs = null;
+    }
+
     //すべての曲フォルダを読み込む。曲が1つも無ければ空のリストを返す
+    //選曲画面を開くたびに呼ばれるので、読み込むのは最初の1回だけにする（返すリストは毎回同じもの）
     public static List<SongData> LoadAll()
     {
-        var songs = new List<SongData>();
-        if (!Directory.Exists(SongsRoot)) return songs;
+        if (cachedSongs != null) return cachedSongs;
 
-        string[] folders = Directory.GetDirectories(SongsRoot);
-        Array.Sort(folders, StringComparer.Ordinal);//PCによって順番が変わらないように
-        foreach (string folder in folders)
+        var songs = new List<SongData>();
+        if (Directory.Exists(SongsRoot))
         {
-            SongData song = LoadSong(folder, songs.Count);
-            if (song != null) songs.Add(song);
+            string[] folders = Directory.GetDirectories(SongsRoot);
+            Array.Sort(folders, StringComparer.Ordinal);//PCによって順番が変わらないように
+            foreach (string folder in folders)
+            {
+                SongData song = LoadSong(folder, songs.Count);
+                if (song != null) songs.Add(song);
+            }
+            Debug.Log($"StreamingAssets/Songs から {songs.Count} 曲を読み込みました");
         }
-        Debug.Log($"StreamingAssets/Songs から {songs.Count} 曲を読み込みました");
+        cachedSongs = songs;
         return songs;
     }
 
@@ -129,7 +144,9 @@ public static class SongLibrary
         {
             return File.ReadAllText(Path.Combine(Application.streamingAssetsPath, chartName));
         }
-        return Resources.Load<TextAsset>(chartName).text;
+        TextAsset asset = Resources.Load<TextAsset>(chartName);
+        if (asset == null) throw new FileNotFoundException($"Resourcesに譜面がありません: {chartName}");
+        return asset.text;
     }
 
     //ジャケット画像を読み込む（一度読んだものは使い回す）。読めなければnull

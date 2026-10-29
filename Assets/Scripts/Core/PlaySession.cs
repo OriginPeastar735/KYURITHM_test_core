@@ -1,10 +1,10 @@
 // シーン間で受け渡すデータを持つstaticクラス
 public static class PlaySession
 {
-    // プレイヤー情報（ログイン機能ができるまではゲスト扱い）
+    // プレイヤー情報（ログイン機能は無いので、名前はゲスト固定）
     public static string PlayerName = "ゲスト";
     public static int TrackNumber = 1;//何曲目か
-    public const int MaxTracks = 3;//1回のプレイで遊べる曲数。この曲数を遊び終えるとオープニングに戻る
+    public const int MaxTracks = 3;//1回のプレイで遊べる曲数。この曲数を遊び終えるとResultシーン・エンディングを経てオープニングに戻る
     public static bool IsFinalTrack => TrackNumber >= MaxTracks;
 
     //1曲遊び終えたときに呼ぶ。まだ続けて遊べるならtrue、規定の曲数を遊び終えたら曲数を戻してfalse

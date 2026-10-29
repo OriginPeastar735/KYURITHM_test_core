@@ -20,12 +20,12 @@ public enum SlideCurve
 public class LongNote : MonoBehaviour
 {
     public LongNoteState state = LongNoteState.None;//このロングノーツの現在の状態を示す
-    public float startBar;//ノーツの小節位置
-    public float scrollSpeed = 1000f;//スクロール定数
-    public float startExpectedTime;
-    public float endExpectedTime; //予定ヒット時間。今は座標0が理想タイミングと仮定してプログラム
+    public float startBar;//始点の小節位置
+    public float scrollSpeed = 1000f;//1小節あたりに進む距離（NoteManagerがハイスピードから設定する）
+    public float startExpectedTime;//始点が判定ラインに来る時刻（曲の再生時間、秒）
+    public float endExpectedTime;//終点が判定ラインに来る時刻（曲の再生時間、秒）
     private float presentBar;//楽曲の現在の小節位置
-    private float endBar;//ロングノーツ終点
+    private float endBar;//終点の小節位置
     public float endZ;//終点のz座標
     public float startZ;//始点のz座標
 
@@ -73,8 +73,8 @@ public class LongNote : MonoBehaviour
         if (HoldNote != null)
         {
             //HoldNoteのCubeメッシュを差し替え、頂点座標をそのまま使えるようにTransformを初期化
-            bodyMesh = new Mesh();//空の形状データを作る
-            bodyMesh.MarkDynamic();//毎フレーム書き換えるメッシュだとUnityに伝え、処理を最適化させる
+            bodyMesh = new Mesh();
+            bodyMesh.MarkDynamic();//毎フレーム頂点を書き換えるメッシュとして扱わせる
             HoldNote.GetComponent<MeshFilter>().mesh = bodyMesh;
             HoldNote.localPosition = Vector3.zero;
             HoldNote.localRotation = Quaternion.identity;
@@ -86,7 +86,6 @@ public class LongNote : MonoBehaviour
                      int startLane, int startWidth, int endLane, int endWidth,
                      bool isFirstSection, bool isLastSection, bool showEndNote, List<float> checkpointTimes, SlideCurve curve)
     {
-        //各変数の代入
         this.curve = curve;
         this.checkpointTimes = checkpointTimes;
         this.nextCheckpoint = 0;
@@ -147,7 +146,6 @@ public class LongNote : MonoBehaviour
     private void GetLaneRangeAtProgress(float t, out float lane, out float width)
     {
         float e = Ease(t);
-        //Lerp(a,b,t): aとbの間で、t割の位置の値を返す。
         lane = Mathf.Lerp(startLane, endLane, e);
         width = Mathf.Lerp(startWidth, endWidth, e);
     }
@@ -155,7 +153,7 @@ public class LongNote : MonoBehaviour
     //時刻timeにおける判定ライン上のレーン範囲（lane, width）。小数になりうる
     public void GetLaneRangeAt(float time, out float lane, out float width)
     {
-        //InverseLerp(a,b,v): vがaからbまでの何割の位置にあるかを返す。範囲外の値は0~1に収まる
+        //時刻をセクション内の進み具合(0〜1)に直す
         float t = Mathf.InverseLerp(startExpectedTime, endExpectedTime, time);
         GetLaneRangeAtProgress(t, out lane, out width);
     }
@@ -167,6 +165,7 @@ public class LongNote : MonoBehaviour
         return lane + width / 2f;
     }
 
+    //現在の小節位置に合わせて始点・終点・帯を動かす。押している間は帯の始点を判定ラインで止める（NoteManagerが毎フレーム呼ぶ）
     public void UpdatePosition(float presentBar)
     {
         this.presentBar = presentBar;
@@ -191,11 +190,10 @@ public class LongNote : MonoBehaviour
             //判定ライン上の位置まで始点を進める
             t0 = Mathf.InverseLerp(startBar, endBar, presentBar);
             startZ = 0;
-            if(StartNote != null) StartNote.gameObject.SetActive(false);//StartNoteを削除
+            if(StartNote != null) StartNote.gameObject.SetActive(false);//押している間は始点ノーツを隠す
         }
 
-        //outは関数から2つ以上の値を受け取る仕組み（returnで返せるのは1つだけのため）。
-        //「out float startLaneF」でここに変数を新しく作り、関数の中で代入された値が入る
+        //帯の始点（押している間は判定ライン上）のレーン範囲
         GetLaneRangeAtProgress(t0, out float startLaneF, out float startWidthF);
 
         //x,yと傾きはLaneSurfaceShapeが決めるので、ここではz位置だけを設定する
@@ -311,11 +309,11 @@ public class LongNote : MonoBehaviour
         state = LongNoteState.Holding;
     }
 
+    //このセクションの判定を終える。エフェクトを消し、NoteManagerのリストから外してオブジェクトを消す
     public void Finish()
     {
         state = LongNoteState.Finished;
         if (holdEffect != null) Destroy(holdEffect);
-        //NoteManagerのリストから消してDestroyする
         NoteManager.instance.RemoveLongNote(this);
         Destroy(gameObject);
     }

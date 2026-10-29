@@ -26,7 +26,7 @@ public class InputManager : MonoBehaviour
 {
     public static InputManager instance;
 
-    public const int LaneCount = 32;//音ゲーの仕様によりレーンは32本。
+    public const int LaneCount = 32;//レーン数（左斜面8・底面16・右斜面8）
 
     public bool[] laneDown = new bool[LaneCount];//このフレームで押された
     public bool[] laneHeld = new bool[LaneCount];//押されている
@@ -91,7 +91,7 @@ public class InputManager : MonoBehaviour
             SetSource((InputSource)(((int)source + 1) % 3));
         }
 
-        //Array.Copy(元, 先, 個数): 配列の中身をコピーする。laneHeldの内容をprevHeldにコピー
+        //前のフレームの押下状態を残してから、このフレームの状態を読み直す
         Array.Copy(laneHeld, prevHeld, LaneCount);
         Array.Clear(laneDown, 0, LaneCount);
         Array.Clear(laneHeld, 0, LaneCount);

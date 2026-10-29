@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+//判定に応じたエフェクトを、判定ライン上のノーツの位置に傾斜に合わせて出す
 public class EffectManager : MonoBehaviour
 {
-    //ここにエフェクトのVFXを格納する
+    //判定ごとのエフェクトのプレハブ
     //FormerlySerializedAs: 旧名(perfect/great/good)でシーンに保存された割り当てを引き継ぐ
     [FormerlySerializedAs("perfectEffectPrefab")] public GameObject precisePlusEffectPrefab;
     [FormerlySerializedAs("greatEffectPrefab")] public GameObject preciseEffectPrefab;

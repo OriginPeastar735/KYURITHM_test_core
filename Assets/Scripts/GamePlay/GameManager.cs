@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
+//プレイ画面の進行。譜面の読み込みを始め、判定を受けてスコア・コンボを集計し、曲が終わったらリザルトを出す
 public class GameManager : MonoBehaviour
 {
     const string DefaultChartName = "test_long";//Playシーン単体で起動したときに使う確認用の譜面（約100秒、全種類のノーツ入り）
@@ -61,7 +62,6 @@ public class GameManager : MonoBehaviour
         material.SetColor("_BaseColor", new Color(color.r * brightness, color.g * brightness, color.b * brightness, color.a));
     }
 
-    // Update is called once per frame
     void Update()
     {
         ComboText.text =  PlayResult[1].ToString();
@@ -116,7 +116,6 @@ public class GameManager : MonoBehaviour
         {
             PlayResult[2] = PlayResult[1];
         }
-        Debug.Log($"Score:{PlayResult[0]}");
     }
 
     void ResetCombo()

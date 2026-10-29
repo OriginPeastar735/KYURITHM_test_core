@@ -5,12 +5,13 @@ using System.IO;
 using Newtonsoft.Json;
 using System;
 
+//譜面jsonを読み込んでノーツを生成し、毎フレーム曲の再生時間に合わせてノーツを動かす
 public class NoteManager : MonoBehaviour
 {
     public static NoteManager instance;
-    public GameObject NotePrefab;//Unity上でNoteプレハブを設定
-    public GameObject HoldPrefab;//Unity上で黄色のholdプレハブを作成し割り当て
-    public GameObject LongNotePrefab;
+    public GameObject NotePrefab;//tapノーツのプレハブ
+    public GameObject HoldPrefab;//holdノーツのプレハブ
+    public GameObject LongNotePrefab;//slideの1セクション分のプレハブ
 
     public float bpm;
     [System.NonSerialized] public string title = "";//譜面のmetaの曲名。リザルト画面で表示する
@@ -24,7 +25,7 @@ public class NoteManager : MonoBehaviour
 
     [Header("ノーツの見た目（長さはノーツの奥行きに対する割合）")]
     public float cornerRadiusRatio = 0.35f;//角の丸みの半径
-    public bool showCenterLine = false;//ノーツの中心に線を入れるか（今は白いノーツで見えないので切っている）
+    public bool showCenterLine = false;//ノーツの中心に線を入れるか（白いノーツでは見えないのでOFF）
     public Color centerLineColor = Color.white;//中心の線の色（slideの中間ノーツには線を入れない）
     public float centerLineWidthRatio = 0.08f;//中心の線の太さ
     public float centerLineInsetRatio = 0.7f;//中心の線の端からノーツの端までの長さ
@@ -40,11 +41,11 @@ public class NoteManager : MonoBehaviour
     private Material outlineMaterial;//縁のマテリアル。線と同じく最初のノーツのマテリアルを複製し、グラデーションのテクスチャを貼る
     private Texture2D outlineTexture;
 
-    private float startTime;
+    private float startTime;//譜面のオフセット（秒）。tick 0 のノーツが判定ラインに来る時刻
 
     private float barMillis;//基本BPMでの1小節の秒数。ノーツは時刻をこの小節数に直して流すので、BPMが変わっても流れる速さは一定
     public int destroyedNotesCount = 0;
-    public float barPertick = 1920f;
+    public float barPertick = 1920f;//1小節のtick数
 
     //BPM変更線を含めたBPMの変化（tick順）。0tickには基本BPMが入る
     private readonly List<BpmChange> bpmTimeline = new List<BpmChange>();
@@ -53,63 +54,6 @@ public class NoteManager : MonoBehaviour
     {
         public float tick;
         public float bpm;
-    }
-
-    //ノーツ情報
-    //tickはエディタのMOVE/QUANTIZEで小数になることがあるのでfloatで読む
-    [System.Serializable]
-    public class NoteData
-    {
-        public string type;
-        public int lane;
-        public int width;
-        public float tick;
-        public float bpm;//BPM変更線の値
-        public List<SlideSection> sections; //slideフォーマット対応のためのlist
-
-        //slideの分岐。親slideの中間ノーツ(parentMidId)につながっている。
-        //branchTypeが"end"なら始点が、"start"なら終点が親の中間ノーツと同じ位置になる
-        //idはエディタ上で数値にも文字列にもなるのでobjectで受け取る
-        public object parentId;
-        public object parentMidId;
-        public string branchType;
-    }
-
-    //slideのjsonフォーマットを認識するためのクラス
-    [Serializable]
-    public class SlideSection
-    {
-        public SlidePointer from;
-        public SlidePointer to;
-        public string curve;
-    }
-
-    //from,to内のフォーマットも認識できるようにする。
-    //これでslideの全ての要素を取り出すことが可能になる
-    [Serializable]
-    public class SlidePointer
-    {
-        public int lane;
-        public int width;
-        public float tick;
-    }
-
-    //譜面の"meta"部分
-    [Serializable]
-    public class MetaData
-    {
-        public string title;
-        public string artist;
-        public float bpm;
-        public float offset;//ms。正の値だとノーツが曲に対して遅れて来る
-        public int? totalNotes;//エディタで数えた総ノーツ数（読み込み時の確認に使う）
-    }
-
-    [System.Serializable]
-    public class NotesData
-    {
-        public MetaData meta;
-        public List<NoteData> notes;
     }
 
     public List<Note> notes = new List<Note>();
@@ -182,16 +126,27 @@ public class NoteManager : MonoBehaviour
         return new Material(source) { name = name, color = color };
     }
 
-    // Start is called before the first frame update
     void Start()
     {
-        //bpmとstartTime(譜面オフセット)はLoadJsonで譜面から設定する（Startの実行順によっては上書きしてしまうため、ここでは設定しない）
+        //bpmとstartTime(譜面オフセット)はLoadJsonで譜面から設定する（ここで設定すると、Startの実行順によってはLoadJsonの値を上書きしてしまう）
     }
 
     public void LoadJson(string fileName)
     {
         //StreamingAssets/Songs の譜面（選曲画面から来たとき）か、Resourcesのデフォルト譜面を読む
-        NotesData notesData = JsonConvert.DeserializeObject<NotesData>(SongLibrary.ReadChart(fileName));
+        //読めない譜面はノーツ0個として扱う（曲が最後まで流れればリザルトに進めるので、プレイ画面で止まらない）
+        ChartData notesData = null;
+        try
+        {
+            notesData = JsonConvert.DeserializeObject<ChartData>(SongLibrary.ReadChart(fileName));
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"{fileName}: 譜面を読み込めませんでした\n{e.Message}");
+        }
+        if (notesData == null) notesData = new ChartData();
+        if (notesData.notes == null) notesData.notes = new List<ChartNoteData>();
+        notesData.notes.RemoveAll(note => note == null);
 
         //判定回数の合計。各Create関数でノーツの判定数を加算していく
         totalCombo = 0;
@@ -224,6 +179,11 @@ public class NoteManager : MonoBehaviour
                 CreateSlide(note);
         }
 
+        //判定と表示の処理は、リストが時刻順に並んでいることを前提に途中で打ち切る
+        notes.Sort((a, b) => a.expectedTime.CompareTo(b.expectedTime));
+        holds.Sort((a, b) => a.expectedTime.CompareTo(b.expectedTime));
+        LongNotes.Sort((a, b) => a.startExpectedTime.CompareTo(b.startExpectedTime));
+
         Debug.Log($"Notes:{totalCombo}");
         //エディタと数え方がずれていると、スコアの理論値が101万点にならない
         if (notesData.meta != null && notesData.meta.totalNotes.HasValue && notesData.meta.totalNotes.Value != totalCombo)
@@ -233,7 +193,7 @@ public class NoteManager : MonoBehaviour
     }
 
     //基本BPMとBPM変更線からBPMの変化を作る（同じtickに複数ある場合は後のものを使う）
-    private void BuildBpmTimeline(List<NoteData> notes)
+    private void BuildBpmTimeline(List<ChartNoteData> notes)
     {
         var bpmByTick = new SortedDictionary<float, float> { [0f] = bpm };
         foreach (var note in notes)
@@ -288,7 +248,7 @@ public class NoteManager : MonoBehaviour
 
     private void CreateNote(float tick, int lane, int width, string type)
     {
-        float expectedTime = ExpectedTime(tick);//各ノーツの理想タイミング
+        float expectedTime = ExpectedTime(tick);
         float bar = DisplayBar(expectedTime);
 
         GameObject obj = Instantiate(NotePrefab);
@@ -296,16 +256,12 @@ public class NoteManager : MonoBehaviour
         note.scrollSpeed = scrollSpeed;
         note.Init(bar, expectedTime, lane, width);
         totalCombo += 1;
-        //Debug.Log($"{rail.name} worldX={rail.position.x}");
-
-        //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
-
         notes.Add(note);
     }
 
     private void CreateHoldNote(float tick, int lane, int width, string type)
     {
-        float expectedTime = ExpectedTime(tick);//各ノーツの理想タイミング
+        float expectedTime = ExpectedTime(tick);
         float bar = DisplayBar(expectedTime);
 
         GameObject obj = Instantiate(HoldPrefab);
@@ -313,19 +269,20 @@ public class NoteManager : MonoBehaviour
         hold.scrollSpeed = scrollSpeed;
         hold.Init(bar, expectedTime, lane, width);
         totalCombo += 1;
-        //Debug.Log($"{rail.name} worldX={rail.position.x}");
-
-        //まとめることができるならswitch文でnotesにadd,holdにadd...とかができそう
-
         holds.Add(hold);
     }
 
     //slideはセクションごとに1つのLongNoteとして生成する
     //ノーツ数 = 始点 + 中間 + 一定間隔判定 + 終点（エディタのSPEC SLIDEと同じ数え方）
-    private void CreateSlide(NoteData note)
+    private void CreateSlide(ChartNoteData note)
     {
         var sections = note.sections;
         if (sections == null || sections.Count == 0) return;
+        if (sections.Exists(section => section == null || section.from == null || section.to == null))
+        {
+            Debug.LogWarning($"始点・終点の無いセクションがあるslideを読み飛ばしました（tick {note.tick}）");
+            return;
+        }
 
         //分岐の接続点は親slideの中間ノーツとして判定するので、こちらでは判定も表示もしない
         bool isBranch = note.parentId != null && note.parentMidId != null;
@@ -368,7 +325,7 @@ public class NoteManager : MonoBehaviour
         return times;
     }
 
-    // ノーツの理想タイミング(秒)を計算する関数
+    //tickの位置のノーツが判定ラインに来る時刻（曲の再生時間、秒）。譜面のオフセットを含む
     private float ExpectedTime(float tick)
     {
         return startTime + TickToTime(tick);
@@ -380,27 +337,33 @@ public class NoteManager : MonoBehaviour
         return (expectedTime - startTime) / barMillis;
     }
 
+    //リストは時刻順なので、壁より奥にあって既に非表示になっているノーツが来たら、それ以降は動かさない
+    //（生成直後は表示状態なので、最初のフレームで一度すべて動かして壁より奥のものを非表示にする）
     void Update()
     {
         float currentTime = MusicManager.instance.CurrentPlayTime;
         float presentBar = (currentTime - startTime) / barMillis;
+        float farBar = presentBar + LaneLayout.VisibleLength / scrollSpeed;//壁の位置の小節位置
 
-        foreach (var note in new List<Note>(notes))
+        foreach (var note in notes)
         {
-            if (note != null)
-                note.UpdatePosition(presentBar);
+            if (note == null) continue;
+            if (!note.gameObject.activeSelf && note.noteBar > farBar) break;
+            note.UpdatePosition(presentBar);
         }
 
-        foreach (var hold in new List<Hold>(holds))
+        foreach (var hold in holds)
         {
-            if (hold != null)
-                hold.UpdatePosition(presentBar);
+            if (hold == null) continue;
+            if (!hold.gameObject.activeSelf && hold.noteBar > farBar) break;
+            hold.UpdatePosition(presentBar);
         }
 
-        foreach (var longNote in new List<LongNote>(LongNotes))
+        foreach (var longNote in LongNotes)
         {
-            if (longNote != null)
-                longNote.UpdatePosition(presentBar);
+            if (longNote == null) continue;
+            if (!longNote.gameObject.activeSelf && longNote.startBar > farBar) break;
+            longNote.UpdatePosition(presentBar);
         }
     }
 

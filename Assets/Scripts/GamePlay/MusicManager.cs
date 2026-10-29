@@ -13,7 +13,7 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 public class MusicManager : MonoBehaviour
 {
     public static MusicManager instance;
-    public float CurrentPlayTime; // 現在の再生時間
+    public float CurrentPlayTime;//曲の再生時間（秒）。再生前はマイナス
     public AudioClip shiningStar;//選曲画面を通らずに起動したときや、音源が読めなかったときに流す曲
     private AudioSource audioSource;
 
@@ -109,7 +109,6 @@ public class MusicManager : MonoBehaviour
         //指定したdspTimeに再生予約（dspは精度のいいタイマー）
         audioSource.PlayScheduled(dspStartTime);
         isPlaying = true;
-        //CurrentPlayTime = 0;
     }
 
     void Update()
@@ -127,7 +126,5 @@ public class MusicManager : MonoBehaviour
         double error = (AudioSettings.dspTime - dspStartTime) - (elapsed + clockCorrection);
         clockCorrection += Math.Abs(error) > ClockSnapSeconds ? error : error * ClockFollowRate;
         CurrentPlayTime = (float)(elapsed + clockCorrection) - TimingOffset;
-        //CurrentPlayTime = audioSource.time;
-        //Debug.Log(CurrentPlayTime);
     }
 }

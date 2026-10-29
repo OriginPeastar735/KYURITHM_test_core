@@ -36,16 +36,16 @@ public class JudgeManager : MonoBehaviour
     public int slideLaneMargin = 0;//slideの範囲を左右に何レーン広げて判定するか（判定を甘くしたい場合に使う）
 
 
-    private float currentPlayTime;//現在の音楽再生時間を記録する変数
-    //missMs(ミリ秒)を秒に直した値を返すプロパティ（120ms → 0.12秒）。
-    //currentPlayTimeやexpectedTimeは秒なので、比べるために単位をそろえている
-    //入力を受け付ける一番外側の範囲で、これを過ぎたノーツは見逃しMISSになる
+    private float currentPlayTime;//このフレームの曲の再生時間（秒）
+    //入力を受け付ける一番外側の範囲（秒）。これを過ぎたノーツは見逃しMISSになる
     private float MissWindow => missMs / 1000f;
 
     //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
     private readonly bool[] consumed = new bool[InputManager.LaneCount];
     //このフレームで押されたレーンを押した時刻（曲の再生時間）。tap・slide始点はフレームの時刻ではなくこの時刻で判定する
     private readonly float[] pressTime = new float[InputManager.LaneCount];
+    //このフレームで押された入力のうち、一番遅い押した時刻。これより判定幅以上先のノーツは判定対象にならない
+    private float latestPressTime;
 
     void Awake()
     {
@@ -61,14 +61,19 @@ public class JudgeManager : MonoBehaviour
 
         currentPlayTime = MusicManager.instance.CurrentPlayTime;
 
-        //Array.Clear(配列, 開始, 個数): 配列を初期値（false）に戻す
+        //入力を未使用に戻し、このフレームで押されたレーンの押した時刻を曲の再生時間に直す
         Array.Clear(consumed, 0, consumed.Length);
+        bool anyDown = false;
+        latestPressTime = float.NegativeInfinity;
         for (int i = 0; i < InputManager.LaneCount; i++)
         {
-            if (InputManager.instance.laneDown[i]) pressTime[i] = MusicManager.instance.ToPlayTime(InputManager.instance.laneDownTimestamp[i]);
+            if (!InputManager.instance.laneDown[i]) continue;
+            pressTime[i] = MusicManager.instance.ToPlayTime(InputManager.instance.laneDownTimestamp[i]);
+            latestPressTime = Mathf.Max(latestPressTime, pressTime[i]);
+            anyDown = true;
         }
 
-        JudgeTaps();
+        if (anyDown) JudgeTaps();
         JudgeHolds();
         JudgeSlides();
         CheckMiss();
@@ -77,8 +82,10 @@ public class JudgeManager : MonoBehaviour
     // ===== tap と slide始点 =====
     //押された入力に対して、判定幅内で一番早いノーツから順に判定する
     //ずれは「押した時刻 - ノーツの時刻」で求めるので、フレームレートに関係なく押したタイミングどおりに判定される
+    //ノーツは時刻順に並んでいるので、どの入力の判定幅にも入らない時刻まで来たら探すのをやめる
     void JudgeTaps()
     {
+        float searchEnd = latestPressTime + MissWindow;
         while (true)
         {
             Note bestNote = null;
@@ -86,14 +93,12 @@ public class JudgeManager : MonoBehaviour
             float bestTime = float.MaxValue;
             float bestPressTime = 0f;//候補のノーツを押した時刻
 
-            //「今判定できるノーツのうち、一番早いもの」を探す。
-            //2つのifで条件に合わないノーツを飛ばし(continue)、全部通過したものを候補にする。
-            //bestTimeは最初とても大きい値なので、最初に条件を満たしたノーツが必ず候補になり、
-            //その後はより早いノーツが見つかるたびに入れ替わる。ループが終わると一番早いノーツが残る
+            //判定幅内に押した入力があるノーツのうち、一番早いものを探す
             foreach (var note in NoteManager.instance.notes)
             {
-                //すでに見つけた候補より遅いノーツは飛ばす
-                if (note == null || note.expectedTime >= bestTime) continue;
+                if (note == null) continue;
+                //時刻順なので、候補より遅いノーツ・判定幅より先のノーツが来たら以降はすべて対象外
+                if (note.expectedTime >= bestTime || note.expectedTime > searchEnd) break;
                 //ノーツの範囲に、まだ使われていない「押した瞬間」の入力が判定幅(±MISS)内の時刻になければ飛ばす
                 if (!TryFreeDown(note.lane, note.width, note.expectedTime, out float press)) continue;
                 bestNote = note;
@@ -105,8 +110,9 @@ public class JudgeManager : MonoBehaviour
             //slideの始点も同じbestTimeと比べるので、tapとslide始点を合わせた中で一番早いものが選ばれる
             foreach (var ln in NoteManager.instance.LongNotes)
             {
-                if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
-                if (ln.startExpectedTime >= bestTime) continue;
+                if (ln == null) continue;
+                if (ln.startExpectedTime >= bestTime || ln.startExpectedTime > searchEnd) break;
+                if (!ln.isFirstSection || ln.state != LongNoteState.None) continue;
                 if (!TryFreeDown(ln.startLane, ln.startWidth, ln.startExpectedTime, out float press)) continue;
                 bestNote = null;
                 bestSlide = ln;
@@ -138,13 +144,16 @@ public class JudgeManager : MonoBehaviour
 
     // ===== hold =====
     //判定ラインを通過する時にノーツの範囲が押されていればPRECISE+
+    //判定したholdはDeleteでリストから消えるので、そのときは添字を進めない
     void JudgeHolds()
     {
-        foreach (var hold in new List<Hold>(NoteManager.instance.holds))
+        List<Hold> holds = NoteManager.instance.holds;
+        for (int i = 0; i < holds.Count;)
         {
-            if (hold == null) continue;
+            Hold hold = holds[i];
+            if (hold == null) { i++; continue; }
             float diff = currentPlayTime - hold.expectedTime;
-            if (diff < 0) continue;//まだ判定ラインに来ていない
+            if (diff < 0) break;//時刻順なので、これ以降のholdもまだ判定ラインに来ていない
 
             if (InputManager.instance.AnyHeld(hold.lane, hold.width))
             {
@@ -156,16 +165,23 @@ public class JudgeManager : MonoBehaviour
                 ShowResult(JudgeResult.Miss, hold.centerLane, diff);
                 hold.Delete();
             }
+            else
+            {
+                i++;
+            }
         }
     }
 
     // ===== slide（判定点） =====
     //チュウニズム方式：一定間隔の判定点ごとに「その時点でslideの範囲に触れているか」を判定する
     //離したタイミングは判定せず、途中で離しても再び触れれば以降の判定点は取れる
+    //判定し終えたセクションはFinishでリストから消えるので、後ろから回す
     void JudgeSlides()
     {
-        foreach (var ln in new List<LongNote>(NoteManager.instance.LongNotes))
+        List<LongNote> longNotes = NoteManager.instance.LongNotes;
+        for (int i = longNotes.Count - 1; i >= 0; i--)
         {
+            LongNote ln = longNotes[i];
             if (ln == null) continue;
 
             if (ln.state == LongNoteState.None)
@@ -234,30 +250,39 @@ public class JudgeManager : MonoBehaviour
     }
 
     // ===== 見逃し =====
+    //ノーツは時刻順なので、まだ判定幅を過ぎていないノーツが来たらそこで終わる
     void CheckMiss()
     {
-        foreach (var note in new List<Note>(NoteManager.instance.notes))
+        List<Note> notes = NoteManager.instance.notes;
+        for (int i = 0; i < notes.Count;)
         {
-            if (note == null) continue;
-            if (currentPlayTime - note.expectedTime > MissWindow)
-            {
-                ShowResult(JudgeResult.Miss, note.centerLane, currentPlayTime - note.expectedTime);
-                note.Delete();
-            }
+            Note note = notes[i];
+            if (note == null) { i++; continue; }
+            float diff = currentPlayTime - note.expectedTime;
+            if (diff <= MissWindow) break;
+            ShowResult(JudgeResult.Miss, note.centerLane, diff);
+            note.Delete();//リストから消えるので添字は進めない
         }
 
-        foreach (var ln in new List<LongNote>(NoteManager.instance.LongNotes))
+        foreach (var ln in NoteManager.instance.LongNotes)
         {
-            if (ln == null || !ln.isFirstSection || ln.state != LongNoteState.None) continue;
+            if (ln == null) continue;
             float diff = currentPlayTime - ln.startExpectedTime;
-            if (diff > MissWindow)
-            {
-                //始点を逃してもslideは続き、以降の判定点は触れれば取れる
-                float centerLane = ln.startLane + ln.startWidth / 2f;
-                ShowResult(JudgeResult.Miss, centerLane, diff);
-                ln.Activate();
-            }
+            if (diff <= MissWindow) break;
+            if (!ln.isFirstSection || ln.state != LongNoteState.None) continue;
+
+            //始点を逃してもslideは続き、以降の判定点は触れれば取れる（Activateはリストを変えないので、そのまま回してよい）
+            float centerLane = ln.startLane + ln.startWidth / 2f;
+            ShowResult(JudgeResult.Miss, centerLane, diff);
+            ln.Activate();
         }
+    }
+
+    //判定ごとのログ。ビルドでは呼び出しごと消える（ログ出力でフレームが重くならないように）
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    static void LogJudge(JudgeResult result, float diffSec)
+    {
+        Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
     }
 
     // ===== 共通処理 =====
@@ -280,7 +305,7 @@ public class JudgeManager : MonoBehaviour
     //判定結果に応じてエフェクトとイベントを発行する（centerLaneはエフェクトを出すレーン位置）
     void ShowResult(JudgeResult result, float centerLane, float diffSec)
     {
-        Debug.Log($"{result}: {diffSec * 1000f:F1}ms");
+        LogJudge(result, diffSec);
         Judged?.Invoke(result, centerLane);
         switch (result)
         {

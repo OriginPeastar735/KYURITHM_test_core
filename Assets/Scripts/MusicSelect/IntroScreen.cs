@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using static UIUtil;
 
 //楽曲紹介画面の進行。画面の部品はMusicSelectViewが作り、このコンポーネントを付けたCanvasはシーンが変わっても残る
 //
@@ -32,22 +33,22 @@ public class IntroScreen : MonoBehaviour
         }
 
         //1. ジャケットと見出し（裏の正方形はジャケットと同じ位置にあるので、まだ隠れている）
-        yield return MusicSelectView.Animate(fadeIn, t =>
+        yield return Animate(fadeIn, t =>
         {
             group.alpha = t;
-            content.localScale = Vector3.one * Mathf.Lerp(0.96f, 1f, MusicSelectView.EaseOut(t));
+            content.localScale = Vector3.one * Mathf.Lerp(0.96f, 1f, EaseOut(t));
         });
 
         //2. 文字送りと、裏の正方形を右下へずらす
         Vector2 backStart = jacketBack.anchoredPosition;
-        yield return MusicSelectView.Animate(reveal, t =>
+        yield return Animate(reveal, t =>
         {
             for (int i = 0; i < typingTexts.Length; i++)
             {
                 //それぞれの文字数に合わせて進めるので、長さに関係なく同時に出し終わる
                 typingTexts[i].text = Partial(fullTexts[i], Mathf.CeilToInt(fullTexts[i].Length * t));
             }
-            jacketBack.anchoredPosition = backStart + jacketBackOffset * MusicSelectView.EaseOut(t);
+            jacketBack.anchoredPosition = backStart + jacketBackOffset * EaseOut(t);
         });
         float holdEnd = Time.time + hold;
 
@@ -59,7 +60,7 @@ public class IntroScreen : MonoBehaviour
 
         //4. 曲の再生を始め、紹介画面を薄くしてプレイ画面を見せる
         PlaySession.WaitingForIntro = false;
-        yield return MusicSelectView.Animate(fadeOut, t => group.alpha = 1f - t);
+        yield return Animate(fadeOut, t => group.alpha = 1f - t);
         Destroy(gameObject);
     }
 

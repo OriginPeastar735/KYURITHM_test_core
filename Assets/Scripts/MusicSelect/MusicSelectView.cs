@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using static UIUtil;
 
 //カード1枚に表示する内容。楽曲カード・設定カードのどちらもこれで表す
 public class CardInfo
@@ -37,7 +38,7 @@ public class CardInfo
             squareText = sprite != null ? "" : "JACKET\n(仮)",
             title = song.title,
             subtitle = song.artist,
-            rank = "RANK -",//ランク基準が決まったら差し替える
+            rank = "RANK -",//ランクは未実装なので仮の表示
             highScore = diff.highScore > 0 ? $"HIGH SCORE\n{diff.highScore:N0}" : "HIGH SCORE\n未プレイ",
         };
     }
@@ -53,8 +54,7 @@ public class CardInfo
 //  1/√2          2           1/√2   ← 画面下辺の比
 public class MusicSelectView : MonoBehaviour
 {
-    const float RefWidth = 1920f;
-    const float RefHeight = 1080f;
+    const float CanvasMatch = 0f;//Canvasは横幅基準で拡大縮小する。センサーの位置は画面の横幅で決まるため
     static readonly float SlopeLength = RefWidth * SensorLayout.SlopeWidthRatio;//斜面センサー1本分の長さ（キャンバス座標）
     static readonly float SlopeSpan = SlopeLength / Mathf.Sqrt(2f);//斜面が画面下辺・側辺を占める長さ
     static readonly float BottomWidth = SlopeLength * 2f;//底面センサーの長さ
@@ -116,11 +116,10 @@ public class MusicSelectView : MonoBehaviour
     {
         this.itemAt = itemAt;
 
-        //日本語を表示できるTMPフォントがまだ無いので、WindowsのフォントをレガシーTextで使う
-        font = Font.CreateDynamicFontFromOSFont(new[] { "Yu Gothic UI", "Meiryo UI", "Meiryo", "MS Gothic", "Arial" }, 32);
+        font = CreateFont();
         gradient = CreateGradientSprite();
 
-        root = CreateCanvas("MusicSelectCanvas", 0);
+        root = CreateCanvas("MusicSelectCanvas", 0, CanvasMatch);
 
         Stretch(CreateImage("Background", root, new Color(0.05f, 0.06f, 0.12f)).rectTransform);
 
@@ -225,7 +224,7 @@ public class MusicSelectView : MonoBehaviour
     }
 
     //画面の切り替えアニメーション。今のカードを横に流して消し、change()で中身を切り替えてから反対側から出す
-    //forward: 先に進むとき（楽曲選択→確定→設定）はtrue、戻るときはfalse
+    //forward: 先に進むとき（楽曲選択→楽曲確認→設定）はtrue、戻るときはfalse
     public void Transition(bool forward, Action change)
     {
         StartCoroutine(TransitionRoutine(forward, change));
@@ -262,7 +261,7 @@ public class MusicSelectView : MonoBehaviour
         const float jacketY = 60f;
         var center = new Vector2(0.5f, 0.5f);
 
-        RectTransform intro = CreateCanvas("IntroCanvas", 100);
+        RectTransform intro = CreateCanvas("IntroCanvas", 100, CanvasMatch);
         DontDestroyOnLoad(intro.gameObject);
         var group = intro.gameObject.AddComponent<CanvasGroup>();
         group.alpha = 0f;
@@ -312,42 +311,11 @@ public class MusicSelectView : MonoBehaviour
         return valueText;
     }
 
-    //画面いっぱいのCanvasを作る。sortingOrderが大きいほど手前に描かれる
-    RectTransform CreateCanvas(string name, int sortingOrder)
-    {
-        var canvasObj = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-        var canvas = canvasObj.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = sortingOrder;
-        var scaler = canvasObj.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(RefWidth, RefHeight);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0f;//横幅基準。センサーの位置は画面の横幅で決まるため
-        return (RectTransform)canvasObj.transform;
-    }
-
     static void AddShadow(Text text)
     {
         var shadow = text.gameObject.AddComponent<Shadow>();
         shadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
         shadow.effectDistance = new Vector2(2f, -2f);
-    }
-
-    //duration秒かけてstep(0→1)を呼び続ける
-    public static IEnumerator Animate(float duration, Action<float> step)
-    {
-        for (float time = 0f; time < duration; time += Time.deltaTime)
-        {
-            step(time / duration);
-            yield return null;
-        }
-        step(1f);
-    }
-
-    public static float EaseOut(float t)
-    {
-        return 1f - (1f - t) * (1f - t);
     }
 
     // ===== 毎フレームの更新 =====
@@ -621,55 +589,11 @@ public class MusicSelectView : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, width, 1), new Vector2(0.5f, 0.5f));
     }
 
-    // ===== UI生成の共通処理 =====
-    RectTransform CreateRect(string name, Transform parent)
-    {
-        var rt = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-        rt.SetParent(parent, false);
-        return rt;
-    }
-
-    Image CreateImage(string name, Transform parent, Color color, Sprite sprite = null)
-    {
-        var image = CreateRect(name, parent).gameObject.AddComponent<Image>();
-        image.sprite = sprite;
-        image.color = color;
-        image.raycastTarget = false;
-        return image;
-    }
-
+    // ===== UI生成 =====
+    //白い文字（選曲画面のフォント）
     Text CreateText(string name, Transform parent, string text, int size, TextAnchor alignment, FontStyle style = FontStyle.Normal)
     {
-        var t = CreateRect(name, parent).gameObject.AddComponent<Text>();
-        t.font = font;
-        t.text = text;
-        t.fontSize = size;
-        t.fontStyle = style;
-        t.alignment = alignment;
-        t.color = Color.white;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        return t;
-    }
-
-    static void Place(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 position, Vector2 size)
-    {
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = pivot;
-        rt.anchoredPosition = position;
-        rt.sizeDelta = size;
-    }
-
-    //親いっぱいに広げる（left, bottom, right, topは内側への余白）
-    static void Stretch(RectTransform rt, float left = 0f, float bottom = 0f, float right = 0f, float top = 0f)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.offsetMin = new Vector2(left, bottom);
-        rt.offsetMax = new Vector2(-right, -top);
+        return UIUtil.CreateText(name, parent, font, Color.white, text, size, alignment, style);
     }
 
     static int Mod(int a, int n)
@@ -711,10 +635,10 @@ public class MusicSelectView : MonoBehaviour
 
         public SongCard(MusicSelectView view, Transform parent)
         {
-            rect = view.CreateRect("Card", parent);
+            rect = CreateRect("Card", parent);
             Place(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(CardWidth, CardHeight));
 
-            background = view.CreateImage("Background", rect, Color.gray);
+            background = CreateImage("Background", rect, Color.gray);
             Stretch(background.rectTransform);
 
             float inner = CardWidth - CardPadding * 2f;
@@ -725,9 +649,9 @@ public class MusicSelectView : MonoBehaviour
             FitOneLine(topLarge);
 
             const float border = 4f;
-            squareBorder = view.CreateImage("SquareBorder", rect, Color.clear);
+            squareBorder = CreateImage("SquareBorder", rect, Color.clear);
             PlaceTop(squareBorder.rectTransform, JacketTop - border, new Vector2(JacketSize + border * 2f, JacketSize + border * 2f));
-            square = view.CreateImage("Square", rect, Color.gray);
+            square = CreateImage("Square", rect, Color.gray);
             PlaceTop(square.rectTransform, JacketTop, new Vector2(JacketSize, JacketSize));
             squareText = view.CreateText("SquareText", square.rectTransform, "", 40, TextAnchor.MiddleCenter, FontStyle.Bold);
             squareText.alignByGeometry = true;//行の高さではなく文字の形で中央に揃える（大きい「?」が上下にずれないように）
@@ -740,7 +664,7 @@ public class MusicSelectView : MonoBehaviour
             PlaceTop(subtitle.rectTransform, 584f, new Vector2(inner, 34f));
             FitOneLine(subtitle);
 
-            var detailRect = view.CreateRect("Detail", rect);
+            var detailRect = CreateRect("Detail", rect);
             PlaceTop(detailRect, 622f, new Vector2(inner - 12f, 80f));
             detail = detailRect.gameObject.AddComponent<CanvasGroup>();
             rank = view.CreateText("Rank", detailRect, "", 44, TextAnchor.MiddleLeft, FontStyle.Bold);

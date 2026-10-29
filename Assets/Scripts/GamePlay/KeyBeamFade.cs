@@ -3,22 +3,20 @@ using System.Collections.Generic;
 using UnityEngine;
 
 //レーンのライトアップ。InputManagerの入力状態に合わせて透明度を変える
-public class railfade : MonoBehaviour
+public class KeyBeamFade : MonoBehaviour
 {
-    [SerializeField] private float Speed = 3;
-    [SerializeField] private float pressedAlfa = 0.3f;
+    [SerializeField] private float Speed = 3;//離したあとに薄くなる速さ（1秒あたりのアルファの減り）
+    [SerializeField] private float pressedAlfa = 0.3f;//押している間のアルファ
     public int laneIndex = 0;//担当するレーン番号（LaneFieldBuilderが設定）
     private Renderer rend;
     private float alfa = 0;
 
-    // Start is called before the first frame update
     void Start()
     {
         rend = GetComponent<Renderer>();
         SetAlfa(0);
     }
 
-    // Update is called once per frame
     void Update()
     {
         //リザルト表示中は押しても光らせない（光っていたものはそのまま消えていく）
