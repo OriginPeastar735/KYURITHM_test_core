@@ -25,6 +25,8 @@ public static class PlaySession
     public static int Difficulty;
     public static string ChartName;//空ならPlay側でデフォルト譜面を使う（読み方はSongLibrary.ReadChart）
     public static string AudioPath;//音源のファイルパス。空ならPlayシーンに設定してある曲を使う
+    public static string SongTitle;//選曲画面で選んだ曲の曲名（リザルトに出す）。空なら譜面jsonのmeta.titleを使う
+    public static string SongArtist;//選曲画面で選んだ曲のアーティスト名。空なら譜面jsonのmeta.artistを使う
     public static bool WaitingForIntro;//楽曲紹介の表示中。trueの間はプレイ画面の曲を再生しない
     public static int SortMode;//選曲画面のソート（MusicSelectManager.SortModeの番号）
     public static bool HasLastSelection;//前の曲を選んだ状態（MusicIndex・Difficulty・SortMode）が残っているか。次の曲の選曲画面はその状態から始める
@@ -37,7 +39,7 @@ public static class PlaySession
     public static int BackgroundBrightnessPercent = 80;//プレイ中の背景の明るさ（50%〜100%）
     public static int LineOpacityPercent = 30;//レーンの区切り線の濃さ（0%で見えない）
     public static int LineDivision = 4;//区切り線を何レーンごとに引くか（0なら引かない。底面と斜面の境目・斜面の端は常に引く）
-    public static int KeyBeamPercent = 20;//押したときに光るキービームの長さ（レーンの長さに対する%）
+    public static int KeyBeamPercent = 100;//押したときに光るキービームの長さ（判定ラインから壁までの長さに対する%。100%で壁まで届く）
     public static int NoteThicknessPercent = 50;//ノーツの太さ（奥行き）。50%がプレハブのままの太さ
     public static bool ShowFastLate = false;//FAST/LATEを表示するか（通常はOFF）
 }

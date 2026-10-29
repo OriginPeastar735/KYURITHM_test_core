@@ -32,7 +32,6 @@ public class GameManager : MonoBehaviour
     string ComboStr;
     string chartName;//今遊んでいる譜面。ハイスコアの記録に使う
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
-
     void Start()
     {
         for (int i = 0; i < 7; i++)
@@ -68,8 +67,10 @@ public class GameManager : MonoBehaviour
         PlayResult[0] = CalcScore();
         ScoreText.text = PlayResult[0].ToString();
 
-        //曲が最後まで流れ、すべてのノーツの判定が終わったらリザルトを出す（ノーツが0個の譜面は曲の終わりだけで出す）
-        if (!isFinished && MusicManager.instance.IsSongFinished && (NoteManager.instance.AllNotesCleared || totalCombo == 0))
+        //すべてのノーツの判定が終わったら（ノーツのリストが全部空になったら）、曲の途中でもリザルトを出す
+        //ノーツが0個の譜面はリストが最初から空なので、曲の終わりで出す
+        bool finished = totalCombo > 0 ? NoteManager.instance.AllNotesCleared : MusicManager.instance.IsSongFinished;
+        if (!isFinished && finished)
         {
             isFinished = true;
             int previousBest = HighScoreStore.Get(chartName);

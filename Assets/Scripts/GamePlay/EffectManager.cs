@@ -17,6 +17,10 @@ public class EffectManager : MonoBehaviour
 
     public float effectY = 0.002f;//エフェクトを出す高さ。床と同じ高さだとチラつく(Zファイティング)ので少し浮かせる
     public float judgeLineZ = 0f;//判定ラインのz座標
+    //エフェクトのOrder in Layer。判定ラインはLaneFieldBuilderで描く順番(renderQueue)を遅くしてあり、そのままだとエフェクトの上に描かれてしまう
+    //Order in LayerはrenderQueueより優先されるので、0より大きくすれば判定ライン・区切り線・床より後に描かれる
+    //ロングノーツの帯(1)よりも上に出すため2にする
+    public int effectSortingOrder = 2;
 
     void Awake()
     {
@@ -32,26 +36,37 @@ public class EffectManager : MonoBehaviour
         return LaneLayout.SurfacePoint(lane, effectY, judgeLineZ);
     }
 
-    // レーン位置(ノーツの中心レーン)を受け取り、傾斜面に合わせた位置・向きでエフェクトをInstantiate
+    //傾斜面に合わせた位置・向きでInstantiateし、判定ラインより手前に描かれるようにする
+    private GameObject Spawn(GameObject prefab, float lane)
+    {
+        GameObject effect = Instantiate(prefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        foreach (Renderer rend in effect.GetComponentsInChildren<Renderer>(true))
+        {
+            rend.sortingOrder = effectSortingOrder;
+        }
+        return effect;
+    }
+
+    // レーン位置(ノーツの中心レーン)を受け取り、エフェクトを出す
     public void PrecisePlusEffect(float lane)
     {
-        Instantiate(precisePlusEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Spawn(precisePlusEffectPrefab, lane);
     }
 
     public void PreciseEffect(float lane)
     {
-        Instantiate(preciseEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Spawn(preciseEffectPrefab, lane);
     }
 
     public void ApproxEffect(float lane)
     {
-        Instantiate(approxEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        Spawn(approxEffectPrefab, lane);
     }
 
     //押している間のエフェクト。消すのは呼び出し側（LongNote.Finish）が行う
     public GameObject HoldEffect(float lane)
     {
-        return Instantiate(holdEffectPrefab, EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+        return Spawn(holdEffectPrefab, lane);
     }
 
     //押している間のエフェクトをレーン位置laneに動かす（slideの移動に追従させる）

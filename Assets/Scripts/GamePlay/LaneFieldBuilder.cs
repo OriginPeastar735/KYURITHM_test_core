@@ -88,13 +88,14 @@ public class LaneFieldBuilder : MonoBehaviour
     }
 
 
-    //押したレーンに出るキービーム。判定ラインから奥へ、選曲画面で設定した長さ（レーンの長さに対する%）だけ伸ばす
+    //押したレーンに出るキービーム。判定ラインから奥へ、選曲画面で設定した長さ（判定ラインから壁までの長さに対する%）だけ伸ばす
+    //壁より奥はノーツが見えない所なので、100%で壁まで届くようにする
     //プレハブの箱の代わりにBeamMeshの板を使い、BeamTextureで上に凸の形にして奥ほど薄くする
     private void BuildLights()
     {
         if (LaneLightPrefab == null || PlaySession.KeyBeamPercent <= 0) return;
 
-        float length = LaneLayout.LaneLength * PlaySession.KeyBeamPercent / 100f;
+        float length = LaneLayout.VisibleLength * PlaySession.KeyBeamPercent / 100f;
         Mesh mesh = BeamMesh();
         Material material = QueuedMaterial(LaneLightPrefab, BeamQueue);
         if (material != null)

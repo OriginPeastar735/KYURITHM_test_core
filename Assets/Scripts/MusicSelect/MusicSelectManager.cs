@@ -377,6 +377,8 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.SortMode = (int)sortMode;
         PlaySession.HasLastSelection = true;
         PlaySession.AudioPath = song.audioPath;
+        PlaySession.SongTitle = song.title;
+        PlaySession.SongArtist = song.artist;
         CloseSortPopup();
         view.PlayDecide();
         //紹介画面を出している間にプレイ画面を読み込み、そのままプレイ画面へ移る
@@ -576,7 +578,7 @@ public class MusicSelectManager : MonoBehaviour
                 () => PlaySession.LineOpacityPercent, v => PlaySession.LineOpacityPercent = v, 0, 100, 5),
             PercentSetting("背景の明るさ", "プレイ中の背景の明るさ",
                 () => PlaySession.BackgroundBrightnessPercent, v => PlaySession.BackgroundBrightnessPercent = v, 50, 100, 5),
-            PercentSetting("キービーム", "押したときに光る長さ（レーンの長さに対する割合）",
+            PercentSetting("キービーム", "押したときに光る長さ（100%で見えている所の奥まで届く）",
                 () => PlaySession.KeyBeamPercent, v => PlaySession.KeyBeamPercent = v, 0, 100, 5),
             PercentSetting("ノーツの太さ", "ノーツの奥行きの太さ",
                 () => PlaySession.NoteThicknessPercent, v => PlaySession.NoteThicknessPercent = v, 10, 100, 10),

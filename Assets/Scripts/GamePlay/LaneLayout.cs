@@ -20,6 +20,11 @@ public static class LaneLayout
 
     public static float LaneWidth => FieldWidth / InputManager.LaneCount;//1レーンの幅（読むたびにFieldWidthから計算する）
 
+    //ノーツ（タップ・ホールド・ロングの始点終点と帯）を面から浮かせる高さ
+    //判定ラインの上面（プレハブの高さ0.01 + 厚み0.011の半分 = 約0.0155）より上にして、判定ラインの下に潜らないようにする
+    //ノーツの縁はこれより0.002下がる（LaneSurfaceShape.OutlineDrop）ので、その分も含めて上に出る値にする
+    public const float NoteHeight = 0.02f;
+
     //水平部分と傾斜部分の境目（折れ目）のレーン位置
     public static float LeftFold => SideLaneCount;//8
     public static float RightFold => InputManager.LaneCount - SideLaneCount;//24

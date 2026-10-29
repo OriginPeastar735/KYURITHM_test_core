@@ -79,6 +79,9 @@ public class LongNote : MonoBehaviour
             HoldNote.localPosition = Vector3.zero;
             HoldNote.localRotation = Quaternion.identity;
             HoldNote.localScale = Vector3.one;
+            //帯は半透明で、描く順番(renderQueue)が判定ラインより早く上から重ねられてしまう
+            //Order in LayerはrenderQueueより優先されるので、0より大きくして判定ラインより後に描く
+            HoldNote.GetComponent<Renderer>().sortingOrder = 1;
         }
     }
 
@@ -197,12 +200,12 @@ public class LongNote : MonoBehaviour
         GetLaneRangeAtProgress(t0, out float startLaneF, out float startWidthF);
 
         //x,yと傾きはLaneSurfaceShapeが決めるので、ここではz位置だけを設定する
-        //0.01fは、床と同じ高さだとチラつく(Zファイティング)ので少し浮かせるための値
+        //高さは判定ラインより上（LaneLayout.NoteHeight）
         //押している間は始点を消しているので更新しない（判定ライン上の小数のレーン位置で毎フレーム板を作り直さないように）
         if(StartNote != null && StartNote.gameObject.activeSelf)
         {
             StartNote.localPosition = new Vector3(0, 0, startZ - frontOffset);
-            startShape.SetRange(startLaneF, startWidthF, 0.01f);
+            startShape.SetRange(startLaneF, startWidthF, LaneLayout.NoteHeight);
         }
         if(EndNote != null)
         {
@@ -211,7 +214,7 @@ public class LongNote : MonoBehaviour
             if (showEnd)
             {
                 EndNote.localPosition = new Vector3(0, 0, endZ - frontOffset);
-                endShape.SetRange(endLane, endWidth, 0.01f);
+                endShape.SetRange(endLane, endWidth, LaneLayout.NoteHeight);
             }
         }
         if(bodyMesh != null)
@@ -272,7 +275,7 @@ public class LongNote : MonoBehaviour
     //進み具合t0からt1までの帯を、曲線に沿って頂点を並べて描く
     private void UpdateBodyMesh(float t0, float t1)
     {
-        const float y = 0.01f;
+        const float y = LaneLayout.NoteHeight;
         int segments = bodyVertices.Length / BodyColumns - 1;
 
         for (int i = 0; i <= segments; i++)

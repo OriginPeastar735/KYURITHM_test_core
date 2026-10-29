@@ -3,12 +3,12 @@ using TMPro;
 using UnityEngine;
 using static UIUtil;
 
-//曲が終わったら（曲が最後まで流れ、全ノーツが消えたら）シーンを切り替えずに、Canvas上のパネル画像を割り込ませてリザルトを出す
+//全ノーツの判定が終わったら（ノーツが0個の譜面は曲が終わったら）シーンを切り替えずに、Canvas上のパネル画像を割り込ませてリザルトを出す
 //
-//  1. 曲の終わりから少し待つ（delay秒）
+//  1. 最後のノーツの判定から少し待つ（delay秒）
 //  2. パネルを画面外からスライドさせながら表示する（slideIn秒）
 //  3. スコアと判定数を0から数え上げる（countUp秒）
-//  4. ハイスコアを出す（更新していたらNEW RECORD）
+//  4. ハイスコアとランクを出す（更新していたらNEW RECORD）
 //  5. レーンのどこか（テスト用にキーボードの任意のキー）が押されたら選曲画面に戻る。規定の曲数を遊び終えていたらResultシーンへ移る
 //
 //panelはCanvasの子に置いた画像(Image)。最初は非表示にしておき、GameManagerからShowで呼び出す
@@ -27,6 +27,7 @@ public class ResultScreen : MonoBehaviour
     [SerializeField] private TextMeshProUGUI approxText;
     [SerializeField] private TextMeshProUGUI missText;
     [SerializeField] private TextMeshProUGUI highScoreText;//未設定ならscoreTextを複製してその下に作る
+    [SerializeField] private TextMeshProUGUI rankText;//スコアのランク（ScoreRank）。数え上げが終わってから出す
 
     [Header("ハイスコア表示（highScoreTextが未設定のときに作るテキスト）")]
     [SerializeField] private Vector2 highScoreOffset = new Vector2(0f, -70f);//scoreTextからの位置
@@ -76,6 +77,7 @@ public class ResultScreen : MonoBehaviour
         SetCounts(result, 0f);
         if (highScoreText == null) highScoreText = CreateHighScoreText();
         highScoreText.text = "";
+        if (rankText != null) rankText.text = "";
 
         //2. 画面外から表示位置へスライドさせる
         Vector2 shownPos = panel.anchoredPosition;
@@ -91,8 +93,9 @@ public class ResultScreen : MonoBehaviour
         //3. スコアと判定数を同時に数え上げる
         yield return Animate(countUp, t => SetCounts(result, EaseOut(t)));
 
-        //4. 数え上げが終わってからハイスコアを出す
+        //4. 数え上げが終わってからハイスコアとランクを出す
         SetHighScore(result[0], previousBest);
+        if (rankText != null) rankText.text = ScoreRank.Get(result[0]);
 
         //5. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
         while (!BackPressed()) yield return null;
@@ -128,13 +131,18 @@ public class ResultScreen : MonoBehaviour
         return Input.anyKeyDown;
     }
 
-    //曲名とアーティスト名はNoteManagerが譜面を読み込んだときにmetaから取っておいたものを使う
+    //曲名とアーティスト名は選曲画面で選んだ曲のものを使う
+    //Playシーンから直接起動した場合など、空ならNoteManagerが譜面のmetaから取っておいたものを使う
     //テキストをまだアタッチしていない場合は何もしない
     void SetSongInfo()
     {
-        if (NoteManager.instance == null) return;
-        if (titleText != null) titleText.text = NoteManager.instance.title;
-        if (artistText != null) artistText.text = NoteManager.instance.artist;
+        if (titleText != null) titleText.text = SongInfo(PlaySession.SongTitle, NoteManager.instance != null ? NoteManager.instance.title : "");
+        if (artistText != null) artistText.text = SongInfo(PlaySession.SongArtist, NoteManager.instance != null ? NoteManager.instance.artist : "");
+    }
+
+    static string SongInfo(string selected, string fromChart)
+    {
+        return string.IsNullOrEmpty(selected) ? fromChart : selected;
     }
 
     //最終値にrate(0〜1)を掛けた値を表示する
