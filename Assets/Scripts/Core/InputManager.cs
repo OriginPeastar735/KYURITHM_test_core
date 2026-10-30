@@ -55,7 +55,7 @@ public class InputManager : MonoBehaviour
     //  1バイト目: lane 0〜7（左斜面）  2バイト目: lane 8〜15（底面）
     //  3バイト目: lane16〜23（底面）    4バイト目: lane24〜31（右斜面）
     //  各バイトの最下位ビット(bit0)が一番小さいレーン番号。1なら押されている
-    [SerializeField] private string portName = "COM5"; //シリアルポート名
+    [SerializeField] private string portName = "COM3"; //シリアルポート名
     private const int baudRate = 115200;
     private const byte packetHeader = 0xAA;
     private const int payloadBytes = LaneCount / 8;//4バイト

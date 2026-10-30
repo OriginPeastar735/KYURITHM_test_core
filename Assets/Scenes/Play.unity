@@ -300,7 +300,7 @@ MonoBehaviour:
   source: 2
   switchKey: 282
   testKeys: 610000007300000064000000660000006a0000006b0000006c0000003b000000i
-  portName: COM5
+  portName: COM3
 --- !u!4 &32248118
 Transform:
   m_ObjectHideFlags: 0
