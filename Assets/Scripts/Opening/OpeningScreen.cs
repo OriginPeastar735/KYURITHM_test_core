@@ -6,8 +6,9 @@ using static UIUtil;
 
 //オープニング画面。UIはすべてこのスクリプトがコードで生成する（シーンにはこのコンポーネントだけあればよい）
 //
-//  タイトル → 学校・学科のマーク → クレジット → 最初に戻る…を繰り返し、何かキーが押されたら選曲画面へ移る
-//  選曲画面の裏読み込みは、白く覆っている間に済ませる。覆いはシーンが変わっても残し、選曲画面の上で薄くして外す
+//  タイトル → 学校・学科のマーク → クレジット → 最初に戻る…を繰り返し、どこかのセンサーが押されたらチュートリアルが必要か聞く
+//  右斜面（必要）ならチュートリアル（Playシーン）へ、左斜面（不要）なら選曲画面へ移る。制限時間内に答えが無ければオープニングに戻る
+//  次のシーンの裏読み込みは、白く覆っている間に済ませる。覆いはシーンが変わっても残し、次のシーンの上で薄くして外す
 //
 //マークの画像は Assets/Resources/Opening/ に次の名前で置く（無ければ仮の枠を出す）。Texture Type は Sprite (2D and UI)
 //  SchoolSymbol … 石川高専のシンボルマーク
@@ -16,12 +17,22 @@ public class OpeningScreen : MonoBehaviour
 {
     static readonly Color TextColor = new Color(0.12f, 0.13f, 0.16f);
     static readonly Color SubTextColor = new Color(0.12f, 0.13f, 0.16f, 0.6f);
+    //チュートリアルを聞くパネルは、オープニングが透けないよう不透明な暗い背景に白い文字（選曲画面と同じ背景色）
+    static readonly Color QuestionBackground = new Color(0.05f, 0.06f, 0.12f);
+    static readonly Color QuestionTextColor = Color.white;
+    static readonly Color QuestionSubTextColor = new Color(1f, 1f, 1f, 0.6f);
 
     [SerializeField] private float slideSeconds = 4f;//1枚を見せている時間（フェードの時間は含まない）
     [SerializeField] private float fadeSeconds = 0.4f;//1枚のフェードイン・フェードアウトそれぞれの時間
     [SerializeField] private float inputLockSeconds = 0.5f;//開始直後は入力を受け付けない（リザルトから戻ったときの押しっぱなし対策）
     [SerializeField] private float exitSeconds = 0.9f;//白く覆うまでの時間
-    [SerializeField] private float revealSeconds = 0.6f;//選曲画面の上で覆いを外す時間
+    [SerializeField] private float revealSeconds = 0.6f;//次のシーンの上で覆いを外す時間
+    [SerializeField] private float questionTimeoutSeconds = 20f;//チュートリアルが必要か聞く制限時間。答えが無ければオープニングに戻る
+
+    //斜面のレーン（左斜面0〜7・右斜面24〜31）と、コントローラー無しでのテスト用キー（プレイ画面のキー配置と位置を合わせている）
+    const int SlopeLaneCount = 8;
+    static readonly KeyCode[] leftSlopeKeys = { KeyCode.A, KeyCode.S, KeyCode.LeftArrow };
+    static readonly KeyCode[] rightSlopeKeys = { KeyCode.L, KeyCode.Semicolon, KeyCode.RightArrow };
 
     struct Credit
     {
@@ -56,13 +67,37 @@ public class OpeningScreen : MonoBehaviour
     private RectTransform canvasRect;
     private Host host;
     private readonly List<CanvasGroup> slides = new List<CanvasGroup>();
-    private Text pressKeyText;
+    private Text startText;
+    private Image background;//オープニングの白い背景
     private Image flash;
+    //答える斜面の光（左斜面: いいえ、右斜面: はい）。色は選曲画面の斜面と同じ
+    static readonly Color NoColor = new Color(0.3f, 0.8f, 1f);
+    static readonly Color YesColor = new Color(1f, 0.4f, 0.75f);
+    class SlopeGlow
+    {
+        public Image image;
+        public Color color;
+        public float level;
+    }
+    private SlopeGlow noGlow, yesGlow;
+
+    private CanvasGroup question;//チュートリアルが必要か聞くパネル
+    private Text timerText;//パネル右上の制限時間
     private float startTime;
+    private float questionTime;//パネルを出した時刻
+    private bool asking;
     private bool leaving;
 
     void Start()
     {
+        //オープニングにはInputManagerが置かれていないので、無ければ作る（斜面センサーで答えるため）
+        //キーボードはこのクラスで専用に読むので、InputManager側はコントローラーのみにする
+        if (InputManager.instance == null)
+        {
+            var input = new GameObject("InputManager").AddComponent<InputManager>();
+            input.SetSource(InputSource.Controller);
+        }
+
         startTime = Time.time;
         font = CreateFont();
         BuildCanvas();
@@ -71,20 +106,109 @@ public class OpeningScreen : MonoBehaviour
 
     void Update()
     {
-        if (leaving || pressKeyText == null) return;
+        if (leaving) return;
 
-        //「PRESS ANY KEY」をゆっくり点滅させる
-        Color c = pressKeyText.color;
+        if (asking)
+        {
+            float remaining = questionTimeoutSeconds - (Time.time - questionTime);
+            SetTimer(Mathf.Max(0, Mathf.CeilToInt(remaining)));
+            UpdateGlow(noGlow, SlopeHeld(0, leftSlopeKeys));
+            UpdateGlow(yesGlow, SlopeHeld(InputManager.LaneCount - SlopeLaneCount, rightSlopeKeys));
+            if (LeftSlopePressed()) Leave(GameScene.MusicSelect);
+            else if (RightSlopePressed()) StartTutorial();
+            else if (remaining <= 0f) CancelAsk();
+            return;
+        }
+
+        //「TOUCH TO START」をゆっくり点滅させる
+        Color c = startText.color;
         c.a = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
-        pressKeyText.color = c;
+        startText.color = c;
 
-        if (Time.time - startTime >= inputLockSeconds && AnyPressed()) Leave();
+        if (Time.time - startTime >= inputLockSeconds && AnyPressed()) Ask();
     }
 
     bool AnyPressed()
     {
         if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
         return Input.anyKeyDown;
+    }
+
+    bool LeftSlopePressed()
+    {
+        return SlopePressed(0, leftSlopeKeys);
+    }
+
+    bool RightSlopePressed()
+    {
+        return SlopePressed(InputManager.LaneCount - SlopeLaneCount, rightSlopeKeys);
+    }
+
+    bool SlopePressed(int firstLane, KeyCode[] keys)
+    {
+        if (InputManager.instance != null && InputManager.instance.AnyDown(firstLane, SlopeLaneCount)) return true;
+        foreach (KeyCode key in keys)
+        {
+            if (Input.GetKeyDown(key)) return true;
+        }
+        return false;
+    }
+
+    // ===== チュートリアルが必要か聞く =====
+    //押したフレームでは答えを読まないので、TOUCH TO STARTで斜面を押してもそのまま答えにはならない
+    void Ask()
+    {
+        asking = true;
+        questionTime = Time.time;
+        startText.gameObject.SetActive(false);
+        SetTimer(Mathf.CeilToInt(questionTimeoutSeconds));
+        host.StartCoroutine(ShowQuestion(true));
+    }
+
+    //制限時間内に答えが無かったときは、パネルを消してTOUCH TO STARTの状態に戻る（スライドショーはそのまま続いている）
+    void CancelAsk()
+    {
+        asking = false;
+        startTime = Time.time;//戻った直後の押しっぱなしで、すぐにまた聞かないようにする
+        startText.gameObject.SetActive(true);
+        host.StartCoroutine(ShowQuestion(false));
+    }
+
+    //パネルを出し入れする。暗い背景が広がるようにフェードしながら、少し大きいところから元の大きさに縮める
+    //（出し入れの間に答えても、表示が途中のまま次の画面へ移るだけで問題ない）
+    IEnumerator ShowQuestion(bool show)
+    {
+        const float seconds = 0.5f;
+        const float startScale = 1.08f;
+        Transform panel = question.transform;
+        yield return Animate(seconds, t =>
+        {
+            float e = EaseOut(t);
+            float shown = show ? e : 1f - e;
+            question.alpha = shown;
+            panel.localScale = Vector3.one * Mathf.Lerp(startScale, 1f, shown);
+        });
+    }
+
+    //選曲画面と同じく、残り10秒から赤くする
+    void SetTimer(int seconds)
+    {
+        timerText.text = seconds.ToString();
+        timerText.color = seconds <= 10 ? new Color(1f, 0.35f, 0.3f) : QuestionTextColor;
+    }
+
+    //曲を流さずにPlaySceneを開き、Tutorialが練習用のノーツを流す
+    void StartTutorial()
+    {
+        PlaySession.IsTutorial = true;
+        //チュートリアルは初心者向けの設定で遊ばせる。終わったらTutorialが元の設定に戻す
+        //（設定はプレイ画面の開始時に読むので、シーンを読み込む前に変える）
+        PlaySession.SettingsBeforeTutorial = PlayPreset.Capture();
+        PlayPreset.Beginner.Apply();
+        PlaySession.ChartName = "";
+        PlaySession.AudioPath = "";
+        PlaySession.WaitingForIntro = false;
+        Leave(GameScene.Play);
     }
 
     // ===== スライドショー =====
@@ -108,22 +232,22 @@ public class OpeningScreen : MonoBehaviour
         }
     }
 
-    // ===== 選曲画面への移動 =====
-    void Leave()
+    // ===== 次のシーンへの移動 =====
+    void Leave(GameScene next)
     {
         if (leaving) return;
         leaving = true;
-        Destroy(pressKeyText.gameObject);
-        pressKeyText = null;
+        Destroy(startText.gameObject);
+        startText = null;
         DontDestroyOnLoad(canvasRect.gameObject);
         host.StopAllCoroutines();
-        host.StartCoroutine(RunLeave());
+        host.StartCoroutine(RunLeave(next));
     }
 
-    //白く覆いながらスライドを拡大 → 覆っている間に選曲画面へ切り替え → 白を薄くして外す
-    IEnumerator RunLeave()
+    //白く覆いながらスライドを拡大 → 覆っている間に次のシーンへ切り替え → 白を薄くして外す
+    IEnumerator RunLeave(GameScene next)
     {
-        AsyncOperation loading = SceneLoader.PreloadScene(GameScene.MusicSelect);
+        AsyncOperation loading = SceneLoader.PreloadScene(next);
 
         Transform[] shown = new Transform[slides.Count];
         float[] startScale = new float[slides.Count];
@@ -143,8 +267,10 @@ public class OpeningScreen : MonoBehaviour
         loading.allowSceneActivation = true;
         while (!loading.isDone) yield return null;
 
-        //切り替わった後は、白だけを残して薄くする
+        //切り替わった後は、白い覆いだけを残して薄くする（背景も消さないと、覆いを外しても白いままで、最後にぱっと切り替わってしまう）
         foreach (CanvasGroup slide in slides) slide.alpha = 0f;
+        question.alpha = 0f;
+        background.enabled = false;
         yield return Animate(revealSeconds, t => flash.color = new Color(1f, 1f, 1f, 1f - EaseOut(t)));
         Destroy(canvasRect.gameObject);
     }
@@ -152,18 +278,23 @@ public class OpeningScreen : MonoBehaviour
     // ===== 画面の組み立て =====
     void BuildCanvas()
     {
-        canvasRect = CreateCanvas("OpeningCanvas", 50, 0.5f);//選曲画面に切り替わった後も、覆いが外れるまでは手前に描く
+        //選曲画面に切り替わった後も、覆いが外れるまでは手前に描く
+        //質問パネルの斜面の光をセンサーに合わせるため、選曲画面と同じく横幅基準で拡大縮小する
+        canvasRect = CreateCanvas("OpeningCanvas", 50, 0f);
         host = canvasRect.gameObject.AddComponent<Host>();
 
         //マークの画像が白背景なので、全体を白にそろえる。文字は濃い色で書く
-        Stretch(CreateImage("Background", canvasRect, Color.white).rectTransform);
+        background = CreateImage("Background", canvasRect, Color.white);
+        Stretch(background.rectTransform);
 
         slides.Add(BuildTitleSlide());
         slides.Add(BuildLogoSlide());
         slides.Add(BuildCreditSlide());
 
-        pressKeyText = CreateText("PressAnyKey", canvasRect, "PRESS ANY KEY", 44, TextAnchor.MiddleCenter, FontStyle.Bold);
-        Place(pressKeyText.rectTransform, new Vector2(0f, -400f), new Vector2(900f, 80f));
+        startText = CreateText("TouchToStart", canvasRect, "TOUCH TO START", 44, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(startText.rectTransform, new Vector2(0f, -400f), new Vector2(900f, 80f));
+
+        question = BuildQuestion();
 
         flash = CreateImage("Flash", canvasRect, new Color(1f, 1f, 1f, 0f));
         Stretch(flash.rectTransform);
@@ -229,6 +360,79 @@ public class OpeningScreen : MonoBehaviour
             Place(affiliation.rectTransform, position + new Vector2(0f, -34f), new Vector2(640f, 40f));
         }
         return slide.GetComponent<CanvasGroup>();
+    }
+
+    //チュートリアルが必要か聞くパネル。スライドの上に不透明な暗い背景で重ね、答えは答える斜面の側に書く
+    CanvasGroup BuildQuestion()
+    {
+        RectTransform panel = CreateSlide("Question");
+        panel.gameObject.AddComponent<Image>().color = QuestionBackground;
+
+        Text heading = CreateText("Heading", panel, "チュートリアルをプレイしますか？", 80, TextAnchor.MiddleCenter, FontStyle.Bold);
+        heading.color = QuestionTextColor;
+        Place(heading.rectTransform, new Vector2(0f, 200f), new Vector2(1600f, 120f));
+        Text note = CreateText("Note", panel, "ノーツの種類と叩き方を練習できます", 36, TextAnchor.MiddleCenter);
+        note.color = QuestionSubTextColor;
+        Place(note.rectTransform, new Vector2(0f, 100f), new Vector2(1600f, 60f));
+
+        BuildAnswer(panel,"いいえ", "すぐに選曲へ", new Vector2(-480f, -200f));
+        BuildAnswer(panel,"はい", "遊び方を練習する", new Vector2(480f, -200f));
+
+        //制限時間（右上）。選曲画面と同じ位置・大きさ
+        var timer = CreateRect("Timer", panel);
+        Place(timer, Vector2.one, Vector2.one, Vector2.one, new Vector2(-60f, -60f), new Vector2(260f, 120f));
+        var label = CreateText("Label", timer, "制限時間", 28, TextAnchor.UpperRight);
+        label.color = QuestionTextColor;
+        Stretch(label.rectTransform);
+        timerText = CreateText("Seconds", timer, "", 80, TextAnchor.LowerRight, FontStyle.Bold);
+        Stretch(timerText.rectTransform);
+
+        //選曲画面と同じく、答える斜面のセンサーに沿って光らせる
+        Sprite gradient = SensorGlow.CreateGradientSprite();
+        noGlow = BuildSlopeGlow(panel, true, "いいえ", NoColor, gradient);
+        yesGlow = BuildSlopeGlow(panel, false, "はい", YesColor, gradient);
+        return panel.GetComponent<CanvasGroup>();
+    }
+
+    SlopeGlow BuildSlopeGlow(RectTransform parent, bool left, string label, Color color, Sprite gradient)
+    {
+        RectTransform slope = SensorGlow.SlopeRect(parent, left ? "NoSlope" : "YesSlope", left);
+        Image image = SensorGlow.WholeSlope(slope, "Glow", color, gradient);
+        Text text = CreateText("Label", slope, label, 30, TextAnchor.MiddleCenter, FontStyle.Bold);
+        text.color = QuestionTextColor;
+        Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+              new Vector2(0f, SensorGlow.SlopeHeight / 2f), new Vector2(SensorGlow.SlopeLength / 2f, SensorGlow.SlopeHeight));
+        return new SlopeGlow { image = image, color = color };
+    }
+
+    //触れている間は明るく、触れていない間はゆっくり明滅させる
+    void UpdateGlow(SlopeGlow glow, bool held)
+    {
+        float target = held ? 1f : SensorGlow.IdleLevel;
+        glow.level = Mathf.Lerp(glow.level, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
+        Color c = glow.color;
+        c.a = glow.level;
+        glow.image.color = c;
+    }
+
+    bool SlopeHeld(int firstLane, KeyCode[] keys)
+    {
+        if (InputManager.instance != null && InputManager.instance.AnyHeld(firstLane, SlopeLaneCount)) return true;
+        foreach (KeyCode key in keys)
+        {
+            if (Input.GetKey(key)) return true;
+        }
+        return false;
+    }
+
+    void BuildAnswer(RectTransform parent, string answer, string detail, Vector2 position)
+    {
+        Text answerText = CreateText("Answer", parent, answer, 96, TextAnchor.MiddleCenter, FontStyle.Bold);
+        answerText.color = QuestionTextColor;
+        Place(answerText.rectTransform, position, new Vector2(600f, 120f));
+        Text detailText = CreateText("Detail", parent, detail, 34, TextAnchor.MiddleCenter);
+        detailText.color = QuestionSubTextColor;
+        Place(detailText.rectTransform, position + new Vector2(0f, -85f), new Vector2(600f, 50f));
     }
 
     //1枚分の入れ物。最初は透明

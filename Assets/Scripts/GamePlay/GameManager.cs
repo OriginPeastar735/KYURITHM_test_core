@@ -32,20 +32,38 @@ public class GameManager : MonoBehaviour
     string ComboStr;
     string chartName;//今遊んでいる譜面。ハイスコアの記録に使う
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
+    int fastCount, lateCount;//PRECISE・APPROXのうち早かった数・遅かった数（最終リザルトに出す）
     void Start()
     {
         for (int i = 0; i < 7; i++)
         {
             PlayResult[i] = 0;
         }
+        if (PlaySession.IsTutorial)
+        {
+            //ノーツは練習ごとにTutorialが流す。スコアの計算に使う総ノーツ数もTutorialが全練習の合計を入れる
+            gameObject.AddComponent<Tutorial>();
+        }
+        else
+        {
+            StartChart();
+        }
+
+        if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
+        JudgeTextDisplay.Create(ComboText.font);
+        ApplyBackgroundBrightness();
+    }
+
+    void StartChart()
+    {
         //MusicSelectを経由せずに起動した場合はChartNameが空なのでデフォルト譜面を読む
         chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
         NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
 
-        if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
-        JudgeTextDisplay.Create(ComboText.font);
-        ApplyBackgroundBrightness();
+        //プレイが始まってすぐノーツが来ないように、最初のノーツが壁から見え始めるまで1小節あける
+        NoteManager notes = NoteManager.instance;
+        MusicManager.instance.SetStartDelay(notes.TravelSeconds + notes.BarSeconds - notes.FirstNoteTime);
     }
 
     //選曲画面で設定した明るさ(%)を背景の色に掛けて暗くする（マテリアルはこのシーンだけの複製を変える）
@@ -69,6 +87,8 @@ public class GameManager : MonoBehaviour
 
         //すべてのノーツの判定が終わったら（ノーツのリストが全部空になったら）、曲の途中でもリザルトを出す
         //ノーツが0個の譜面はリストが最初から空なので、曲の終わりで出す
+        //チュートリアルはリザルトを出さない（終わりはTutorialが決める）
+        if (PlaySession.IsTutorial) return;
         bool finished = totalCombo > 0 ? NoteManager.instance.AllNotesCleared : MusicManager.instance.IsSongFinished;
         if (!isFinished && finished)
         {
@@ -76,8 +96,28 @@ public class GameManager : MonoBehaviour
             int previousBest = HighScoreStore.Get(chartName);
             bool hasPlayed = HighScoreStore.Has(chartName);
             HighScoreStore.Submit(chartName, PlayResult[0]);
+            RecordTrack();
             if (resultScreen != null) resultScreen.Show(PlayResult, hasPlayed ? previousBest : (int?)null, hideOnResult);
         }
+    }
+
+    //最終リザルトに出す1曲分の結果を残す
+    void RecordTrack()
+    {
+        PlaySession.RecordTrack(new TrackResult
+        {
+            title = string.IsNullOrEmpty(PlaySession.SongTitle) ? NoteManager.instance.title : PlaySession.SongTitle,
+            difficulty = PlaySession.Difficulty,
+            level = PlaySession.SongLevel,
+            jacketPath = PlaySession.JacketPath,
+            score = PlayResult[0],
+            precisePlus = PlayResult[3],
+            precise = PlayResult[4],
+            approx = PlayResult[5],
+            miss = PlayResult[6],
+            fast = fastCount,
+            late = lateCount,
+        });
     }
 
     //全ノーツPRECISE+で baseScore の101%(101万点)になる
@@ -119,6 +159,13 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    //diffSecが負なら早い(FAST)
+    void CountFastLate(float diffSec)
+    {
+        if (diffSec < 0f) fastCount++;
+        else lateCount++;
+    }
+
     void ResetCombo()
     {
         PlayResult[1] = 0;
@@ -130,6 +177,7 @@ public class GameManager : MonoBehaviour
         JudgeManager.Precise += AddPrecise;
         JudgeManager.Approx += AddApprox;
         JudgeManager.Miss += AddMiss;
+        JudgeManager.FastLate += CountFastLate;
     }
 
     void OnDisable()
@@ -138,5 +186,6 @@ public class GameManager : MonoBehaviour
         JudgeManager.Precise -= AddPrecise;
         JudgeManager.Approx -= AddApprox;
         JudgeManager.Miss -= AddMiss;
+        JudgeManager.FastLate -= CountFastLate;
     }
 }

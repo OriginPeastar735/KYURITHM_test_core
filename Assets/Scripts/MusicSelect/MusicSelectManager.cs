@@ -18,9 +18,10 @@ public enum SelectZone
 //選曲画面の操作と状態を管理する。表示はMusicSelectViewに任せる
 //
 //画面は3段階で切り替わる
-//  SelectSong（楽曲選択）  --決定-->  Confirm（楽曲カード / 設定カード）  --設定カードで決定-->  Settings（各種設定カード）
-//                         <--戻る--                                       <--戻る・決定--
+//  SelectSong（楽曲選択）  --決定-->  Confirm（楽曲カード / プリセットカード / 設定カード）  --設定カードで決定-->  Settings（各種設定カード）
+//                         <--戻る--                                                         <--戻る・決定--
 //  ConfirmでSTARTを押すとプレイ画面へ。左斜面（ソート切り替え）はConfirm・Settingsでは戻るボタンになる
+//  プリセットカードで決定すると、その右に初心者向け・上級者向けのカードが開く（もう一度押すと閉じる）。開いたカードで決定するとその設定をまとめて適用する
 public class MusicSelectManager : MonoBehaviour
 {
     public const int ZoneCount = 7;
@@ -79,8 +80,7 @@ public class MusicSelectManager : MonoBehaviour
     private List<SongData> songs;
     private List<int> order = new List<int>();//今の難易度がある曲だけをソートした並び（songsのインデックス）
     private SortMode sortMode = SortMode.TitleAsc;
-    private int difficulty = 0;//選んでいる難易度。最初は一番低い難易度
-    private int maxDifficulty;//どれかの曲に存在する一番高い難易度
+    private int difficulty = 0;//選んでいる難易度。最初はどれかの曲にある一番低い難易度
     private List<SettingItem> settings;
 
     private Phase phase = Phase.SelectSong;
@@ -93,6 +93,7 @@ public class MusicSelectManager : MonoBehaviour
     private MusicSelectView view;
     private MusicPreview preview;
     private bool chosenByRandom;//Confirmの曲がランダム選曲カードで抽選された曲か（試聴を流さない）
+    private bool presetsOpen;//Confirmでプリセットカードの右に初心者向け・上級者向けのカードを開いているか
     private float remainingTime;
     private bool started = false;
     private float inputLockUntil;
@@ -124,7 +125,7 @@ public class MusicSelectManager : MonoBehaviour
             songs = PlaceholderSongs.Create();
         }
         ApplyHighScores();
-        foreach (var song in songs) maxDifficulty = Mathf.Max(maxDifficulty, song.difficulties.Count - 1);
+        difficulty = FindDifficulty(-1, 1);
         if (PlaySession.HasLastSelection) RestoreLastSelection();
         else ApplySort();
         settings = CreateSettings();
@@ -212,7 +213,8 @@ public class MusicSelectManager : MonoBehaviour
         if (Pressed(SelectZone.Decide)) TrySwitch(() => EnterConfirm(0));
     }
 
-    //カード0: 楽曲カード（STARTでプレイ開始） カード1: 設定カード（決定で各種設定へ）
+    //カード0: 楽曲カード（STARTでプレイ開始） カード1: プリセットカード（決定で初心者向け・上級者向けを開閉）
+    //開いているときはカード2,3: 各プリセット（決定で適用） 最後: 設定カード（決定で各種設定へ）
     //右斜面でこの曲の難易度を切り替えられる
     void HandleConfirm()
     {
@@ -228,8 +230,36 @@ public class MusicSelectManager : MonoBehaviour
         {
             //決定の連打で確認画面を飛ばさないよう、STARTも切り替え間隔の制限をかける
             if (position == 0) TrySwitch(StartGame);
-            else TrySwitch(EnterSettings);
+            else if (position == PresetPosition) TrySwitch(TogglePresets);
+            else if (position == SettingsPosition) TrySwitch(EnterSettings);
+            else TrySwitch(() => ApplyPreset(PresetAt(position)));
         }
+    }
+
+    // ===== Confirmのカードの並び =====
+    const int PresetPosition = 1;
+    int OpenPresetCount => presetsOpen ? PlayPreset.All.Length : 0;
+    int SettingsPosition => PresetPosition + 1 + OpenPresetCount;
+
+    //位置pに開いているプリセット。プリセットのカードでなければnull
+    PlayPreset PresetAt(int p)
+    {
+        int i = p - PresetPosition - 1;
+        return i >= 0 && i < OpenPresetCount ? PlayPreset.All[i] : null;
+    }
+
+    //プリセットのカードを開く・閉じる。プリセットカードは位置が変わらないので、右側のカードだけが入れ替わる
+    void TogglePresets()
+    {
+        presetsOpen = !presetsOpen;
+        view.RefreshCards();
+    }
+
+    void ApplyPreset(PlayPreset preset)
+    {
+        preset.Apply();
+        view.PlayDecide();
+        view.RefreshCards();
     }
 
     //右斜面の −/+ で値を変える（長押しで連続して変わる）。戻る・決定で楽曲カード・設定カードの画面に戻る
@@ -237,7 +267,7 @@ public class MusicSelectManager : MonoBehaviour
     {
         if (BackPressed || Pressed(SelectZone.Decide))
         {
-            TrySwitch(() => EnterConfirm(1));
+            TrySwitch(() => EnterConfirm(SettingsPosition));
             return;
         }
         HandleMove();
@@ -293,7 +323,7 @@ public class MusicSelectManager : MonoBehaviour
         return next >= 0 && next < ItemCount;
     }
 
-    int ItemCount => phase == Phase.Confirm ? 2 : phase == Phase.Settings ? settings.Count : order.Count + 1;
+    int ItemCount => phase == Phase.Confirm ? SettingsPosition + 1 : phase == Phase.Settings ? settings.Count : order.Count + 1;
 
     // ===== 画面の切り替え =====
     void EnterConfirm(int focus)
@@ -305,6 +335,7 @@ public class MusicSelectManager : MonoBehaviour
             songPosition = position;
             chosenByRandom = SelectIndex(position) == order.Count;
             chosenSong = SelectedSong();
+            presetsOpen = false;//曲を選び直したらプリセットは閉じた状態から
         }
         CloseSortPopup();
         SetPhase(Phase.Confirm, focus, forward);
@@ -336,7 +367,7 @@ public class MusicSelectManager : MonoBehaviour
     void RestoreLastSelection()
     {
         sortMode = (SortMode)Mathf.Clamp(PlaySession.SortMode, 0, sortNames.Length - 1);
-        difficulty = Mathf.Clamp(PlaySession.Difficulty, 0, maxDifficulty);
+        if (IsSelectableDifficulty(PlaySession.Difficulty)) difficulty = PlaySession.Difficulty;
         ApplySort();
         int index = order.FindIndex(i => songs[i].id == PlaySession.MusicIndex);
         if (index >= 0) position = index;
@@ -360,7 +391,7 @@ public class MusicSelectManager : MonoBehaviour
         {
             foreach (var diff in song.difficulties)
             {
-                if (HighScoreStore.Has(diff.chartName)) diff.highScore = HighScoreStore.Get(diff.chartName);
+                if (diff != null && HighScoreStore.Has(diff.chartName)) diff.highScore = HighScoreStore.Get(diff.chartName);
             }
         }
     }
@@ -379,6 +410,8 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.AudioPath = song.audioPath;
         PlaySession.SongTitle = song.title;
         PlaySession.SongArtist = song.artist;
+        PlaySession.JacketPath = song.jacketPath;
+        PlaySession.SongLevel = song.difficulties[difficulty].level;
         CloseSortPopup();
         view.PlayDecide();
         //紹介画面を出している間にプレイ画面を読み込み、そのままプレイ画面へ移る
@@ -397,7 +430,7 @@ public class MusicSelectManager : MonoBehaviour
         view.SetZoneLabel(SelectZone.SortNext, selecting ? "→" : "");
         view.SetZoneLabel(SelectZone.Left, "← 左");
         view.SetZoneLabel(SelectZone.Right, "右 →");
-        view.SetZoneLabel(SelectZone.Decide, selecting ? "決定" : phase == Phase.Settings ? "OK" : position == 0 ? "START" : "設定");
+        view.SetZoneLabel(SelectZone.Decide, selecting ? "決定" : phase == Phase.Settings ? "OK" : ConfirmDecideLabel());
         view.SetSlopeTitle(false, phase == Phase.Settings ? "設定変更" : "難易度切り替え");
         SettingItem setting = phase == Phase.Settings ? settings[position] : null;
         view.SetZoneLabel(SelectZone.DiffDown, setting != null ? setting.minusLabel : "−");
@@ -417,15 +450,41 @@ public class MusicSelectManager : MonoBehaviour
         }
     }
 
+    string ConfirmDecideLabel()
+    {
+        if (position == 0) return "START";
+        if (position == PresetPosition) return presetsOpen ? "閉じる" : "開く";
+        if (position == SettingsPosition) return "設定";
+        return "適用";
+    }
+
     //右斜面(−/+)が押せるか。楽曲選択・Confirmでは難易度、設定では値の変更
     bool CanChangeRight(int dir)
     {
         if (phase == Phase.Settings) return settings[position].canChange(dir);
-        return dir < 0 ? difficulty > 0 : difficulty < MaxSelectableDifficulty;
+        return FindDifficulty(difficulty, dir) >= 0;
     }
 
-    //選べる一番高い難易度。Confirmでは選んだ曲にある難易度まで
-    int MaxSelectableDifficulty => phase == Phase.Confirm ? chosenSong.difficulties.Count - 1 : maxDifficulty;
+    //選べる難易度か。楽曲選択ではどれかの曲にある難易度、Confirmでは選んだ曲にある難易度
+    bool IsSelectableDifficulty(int d)
+    {
+        if (phase == Phase.Confirm) return chosenSong.HasDifficulty(d);
+        foreach (var song in songs)
+        {
+            if (song.HasDifficulty(d)) return true;
+        }
+        return false;
+    }
+
+    //fromからdirの向きに見て最初に選べる難易度。無ければ-1（譜面が無い難易度は飛ばす）
+    int FindDifficulty(int from, int dir)
+    {
+        for (int d = from + dir; d >= 0 && d < DifficultyInfo.Names.Length; d += dir)
+        {
+            if (IsSelectableDifficulty(d)) return d;
+        }
+        return -1;
+    }
 
     //左上の表示。ソートはポップアップで確認できるので、楽曲選択では何も出さない
     void RefreshInfo()
@@ -473,8 +532,8 @@ public class MusicSelectManager : MonoBehaviour
     //Confirmで変えたときも楽曲選択の並びを作り直しておき、戻ったときに同じ曲が選ばれているようにする
     void ChangeDifficulty(int delta)
     {
-        int next = Mathf.Clamp(difficulty + delta, 0, MaxSelectableDifficulty);
-        if (next == difficulty) return;
+        int next = FindDifficulty(difficulty, delta);
+        if (next < 0) return;
         difficulty = next;
         if (phase == Phase.SelectSong)
         {
@@ -510,7 +569,7 @@ public class MusicSelectManager : MonoBehaviour
         order.Clear();
         for (int i = 0; i < songs.Count; i++)
         {
-            if (songs[i].difficulties.Count > difficulty) order.Add(i);
+            if (songs[i].HasDifficulty(difficulty)) order.Add(i);
         }
 
         order.Sort((a, b) =>
@@ -546,9 +605,9 @@ public class MusicSelectManager : MonoBehaviour
                 name = "ハイスピード",
                 description = "ノーツが流れてくる速さ",
                 value = () => PlaySession.HiSpeed.ToString("0.0"),
-                //1.0〜12.0を0.1刻み。0.1を足し続けると誤差が溜まるので、毎回小数第1位に丸める
-                canChange = d => d < 0 ? PlaySession.HiSpeed > 1.05f : PlaySession.HiSpeed < 11.95f,
-                change = d => PlaySession.HiSpeed = Mathf.Clamp(Mathf.Round((PlaySession.HiSpeed + d * 0.1f) * 10f) / 10f, 1f, 12f),
+                //1.0〜10.0を0.1刻み。0.1を足し続けると誤差が溜まるので、毎回小数第1位に丸める
+                canChange = d => d < 0 ? PlaySession.HiSpeed > 1.05f : PlaySession.HiSpeed < 9.95f,
+                change = d => PlaySession.HiSpeed = Mathf.Clamp(Mathf.Round((PlaySession.HiSpeed + d * 0.1f) * 10f) / 10f, 1f, 10f),
             },
             new SettingItem
             {
@@ -582,6 +641,16 @@ public class MusicSelectManager : MonoBehaviour
                 () => PlaySession.KeyBeamPercent, v => PlaySession.KeyBeamPercent = v, 0, 100, 5),
             PercentSetting("ノーツの太さ", "ノーツの奥行きの太さ",
                 () => PlaySession.NoteThicknessPercent, v => PlaySession.NoteThicknessPercent = v, 10, 100, 10),
+            new SettingItem
+            {
+                name = "小節線",
+                description = "1小節ごとにレーンを横切る線を流す",
+                value = () => PlaySession.ShowBarLines ? "ON" : "OFF",
+                canChange = d => d < 0 ? PlaySession.ShowBarLines : !PlaySession.ShowBarLines,
+                change = d => PlaySession.ShowBarLines = d > 0,
+                minusLabel = "OFF",
+                plusLabel = "ON",
+            },
             new SettingItem
             {
                 name = "FAST/LATE表示",
@@ -626,8 +695,10 @@ public class MusicSelectManager : MonoBehaviour
         {
             case Phase.Confirm:
                 if (p == 0) return CardInfo.FromSong(chosenSong, difficulty);
-                if (p == 1) return SettingsCard();
-                return null;
+                if (p == PresetPosition) return PresetsCard();
+                if (p == SettingsPosition) return SettingsCard();
+                PlayPreset preset = PresetAt(p);
+                return preset != null ? PresetCard(preset) : null;
             case Phase.Settings:
                 return p >= 0 && p < settings.Count ? SettingItemCard(settings[p]) : null;
             default:
@@ -668,6 +739,53 @@ public class MusicSelectManager : MonoBehaviour
             titleSize = 32,
             subtitle = $"ハイスピード {PlaySession.HiSpeed:0.0} / タイミング {PlaySession.TimingOffsetMs:+0;-0;0}ms",
             subtitleSize = 26,
+        };
+    }
+
+    static readonly Color presetColor = new Color(0.36f, 0.42f, 0.36f);
+
+    CardInfo PresetsCard()
+    {
+        return new CardInfo
+        {
+            background = presetColor,
+            topSmall = "PRESET",
+            topLarge = "おすすめ",
+            squareColor = new Color(0.22f, 0.27f, 0.22f),
+            squareText = "PRESET",
+            squareTextSize = 64,
+            title = "おすすめプリセット",
+            titleSize = 32,
+            subtitle = presetsOpen ? "決定で閉じる" : "決定で初心者向け・上級者向けを表示",
+            subtitleSize = 26,
+        };
+    }
+
+    //ジャケットの位置に、適用される値の一覧を出す
+    CardInfo PresetCard(PlayPreset preset)
+    {
+        string values =
+            $"ハイスピード {preset.hiSpeed:0.0}\n" +
+            $"壁 {preset.wall}%\n" +
+            $"レーンの濃さ {preset.laneOpacity}%\n" +
+            $"分割線 {(preset.lineDivision > 0 ? preset.lineDivision.ToString() : "なし")}\n" +
+            $"分割線の濃さ {preset.lineOpacity}%\n" +
+            $"背景の明るさ {preset.backgroundBrightness}%\n" +
+            $"キービーム {preset.keyBeam}%\n" +
+            $"ノーツの太さ {preset.noteThickness}%\n" +
+            $"FAST/LATE {(preset.showFastLate ? "ON" : "OFF")}";
+        return new CardInfo
+        {
+            background = preset.color,
+            topSmall = "PRESET",
+            topLarge = preset.name,
+            squareColor = Color.Lerp(preset.color, Color.black, 0.45f),
+            squareText = values,
+            squareTextSize = 30,
+            title = preset.description,
+            titleSize = 28,
+            subtitle = preset.IsApplied ? "適用中" : "決定で適用",
+            subtitleSize = 28,
         };
     }
 

@@ -56,13 +56,13 @@ public class MusicManager : MonoBehaviour
     void Start()
     {
         audioSource = gameObject.GetComponent<AudioSource>();
-        audioSource.clip = shiningStar;
+        audioSource.clip = PlaySession.IsTutorial ? null : shiningStar;//チュートリアルでは曲を流さず、時計だけ進める
         //再生前はノーツを曲が始まるstartDelay秒前の位置に置いておく
         CurrentPlayTime = -startDelay - TimingOffset;
         //選曲画面で選んだ曲の音源をStreamingAssetsから読み込む（楽曲紹介を出している間に読み終わる）
         if (!string.IsNullOrEmpty(PlaySession.AudioPath)) StartCoroutine(LoadAudio(PlaySession.AudioPath));
+        //再生はUpdateで始める（GameManagerが譜面を読んでSetStartDelayで待ち時間を決めてから始めるため）
         //選曲画面の楽曲紹介が出ている間は、紹介が終わるまで再生を待つ
-        if (CanStart) StartMusic();
     }
 
     IEnumerator LoadAudio(string path)
@@ -100,6 +100,14 @@ public class MusicManager : MonoBehaviour
         return CurrentPlayTime + (float)((timestamp - frameTimestamp) / (double)Stopwatch.Frequency);
     }
 
+    //曲が始まるまでの待ち時間を、今より長ければ延ばす（再生を始める前だけ）
+    public void SetStartDelay(float seconds)
+    {
+        if (isPlaying || seconds <= startDelay) return;
+        startDelay = seconds;
+        CurrentPlayTime = -startDelay - TimingOffset;
+    }
+
     void StartMusic()
     {
         dspStartTime = AudioSettings.dspTime + startDelay;
@@ -107,7 +115,7 @@ public class MusicManager : MonoBehaviour
         clockCorrection = 0;
 
         //指定したdspTimeに再生予約（dspは精度のいいタイマー）
-        audioSource.PlayScheduled(dspStartTime);
+        if (audioSource.clip != null) audioSource.PlayScheduled(dspStartTime);
         isPlaying = true;
     }
 

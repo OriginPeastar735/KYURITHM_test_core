@@ -28,8 +28,17 @@ public class LaneFieldBuilder : MonoBehaviour
     const int LineQueue = 3002;
     const int JudgeLineQueue = 3003;
 
+    public static LaneFieldBuilder instance;
+
+    //斜面のものを、チュートリアルで斜面を使わない間だけ隠すために覚えておく
+    private readonly List<GameObject> slopeObjects = new List<GameObject>();//斜面のキービーム・区切り線・判定ライン・壁の線
+    private readonly List<Renderer> slopeRails = new List<Renderer>();//斜面の床
+    private Material slopeRailMaterial;//斜面の床の普段のマテリアル
+    private Material hiddenRailMaterial;//隠している間の斜面の床（黒）
+
     void Awake()
     {
+        instance = this;
         LaneLayout.LaneLength = laneLength;
         //判定ラインが筐体のセンサーに重なるようにカメラを置く
         Camera cam = Camera.main;
@@ -47,8 +56,36 @@ public class LaneFieldBuilder : MonoBehaviour
             Material bottomMaterial = sideMaterial != null ? new Material(sideMaterial) : null;
             if (bottomMaterial != null) bottomMaterial.SetFloat("_Smoothness", bottomSmoothness);
             BuildPerLane(RailVisualPrefab, "RailVisual", true, sideMaterial, bottomMaterial);
+            slopeRailMaterial = sideMaterial;
         }
         BuildWallLine(judgeMaterial);
+    }
+
+    void OnDestroy()
+    {
+        if (instance == this) instance = null;
+        if (hiddenRailMaterial != null) Destroy(hiddenRailMaterial);
+    }
+
+    //true: 斜面の床を黒くし、斜面のキービーム・区切り線・判定ライン・壁の線を消す（チュートリアルで底面だけを使う間）
+    //底面と斜面の境目の線は底面の端として残す
+    public void SetSlopesHidden(bool hidden)
+    {
+        foreach (GameObject obj in slopeObjects) obj.SetActive(!hidden);
+
+        if (slopeRailMaterial == null) return;
+        if (hiddenRailMaterial == null)
+        {
+            hiddenRailMaterial = new Material(slopeRailMaterial) { name = "HiddenSlopeRail" };
+            hiddenRailMaterial.SetColor("_BaseColor", Color.black);
+            hiddenRailMaterial.SetFloat("_Smoothness", 0f);//光の反射で白っぽく見えないようにする
+        }
+        foreach (Renderer rail in slopeRails) rail.sharedMaterial = hidden ? hiddenRailMaterial : slopeRailMaterial;
+    }
+
+    static bool IsSlopeLane(int lane)
+    {
+        return lane < LaneLayout.LeftFold || lane >= LaneLayout.RightFold;
     }
 
     //prefabのマテリアルを複製し、描く順番をqueueにする
@@ -72,6 +109,14 @@ public class LaneFieldBuilder : MonoBehaviour
         color.a = PlaySession.LaneOpacityPercent / 100f;
         material.SetColor("_BaseColor", color);
         material.renderQueue = RailQueue;
+        return material;
+    }
+
+    //小節線（NoteManagerが流す）のマテリアル。区切り線と同じ白い半透明で、裏表を気にしなくていいように両面を描く
+    public Material CreateBarLineMaterial(float alpha)
+    {
+        Material material = LineMaterial(alpha);
+        if (material != null) material.SetFloat("_Cull", 0f);
         return material;
     }
 
@@ -108,6 +153,7 @@ public class LaneFieldBuilder : MonoBehaviour
         {
             GameObject obj = Instantiate(LaneLightPrefab, transform);
             obj.name = $"LaneLight_{lane}";
+            if (IsSlopeLane(lane)) slopeObjects.Add(obj);
             obj.GetComponentInChildren<MeshFilter>().sharedMesh = mesh;
             if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
 
@@ -139,6 +185,7 @@ public class LaneFieldBuilder : MonoBehaviour
 
             GameObject obj = Instantiate(LaneLinePrefab, transform);
             obj.name = $"LaneLine_{i}";
+            if (i < LaneLayout.LeftFold || i > LaneLayout.RightFold) slopeObjects.Add(obj);//斜面の中と外側の端の線
             Material material = isBoundary ? boundaryMaterial : lineMaterial;
             if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             //壁より奥（ノーツが見えない所）には区切り線を引かない
@@ -172,6 +219,12 @@ public class LaneFieldBuilder : MonoBehaviour
             if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             FitWidth(obj, LaneLayout.LaneWidth);
             if (fitDepth) FitDepth(obj, LaneLayout.LaneLength);
+            if (!isBottom)
+            {
+                //床は色を変え、それ以外（判定ライン）は消す
+                if (prefab == RailVisualPrefab) slopeRails.Add(obj.GetComponentInChildren<Renderer>());
+                else slopeObjects.Add(obj);
+            }
             PlaceOnSurface(obj.transform, lane + 0.5f, LaneLayout.SurfaceAngle(lane + 0.5f));
         }
     }
@@ -186,6 +239,7 @@ public class LaneFieldBuilder : MonoBehaviour
         {
             GameObject obj = Instantiate(JudgeLinePrefab, transform);
             obj.name = $"WallLine_{lane}";
+            if (IsSlopeLane(lane)) slopeObjects.Add(obj);
             if (material != null) obj.GetComponentInChildren<Renderer>().sharedMaterial = material;
             FitWidth(obj, LaneLayout.LaneWidth);
             obj.transform.localScale = Vector3.Scale(obj.transform.localScale, new Vector3(1, 1, wallLineThickness));

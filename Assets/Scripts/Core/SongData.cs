@@ -12,7 +12,13 @@ public class SongData
     public float bpm;
     public string jacketPath;//ジャケット画像のファイルパス。空なら仮のジャケットを表示
     public string audioPath;//音源のファイルパス。空ならプレイ画面に設定してある曲を使う
-    public List<DifficultyData> difficulties = new List<DifficultyData>();//基本2種類、一部の曲のみ3種類（リストの順番が難易度の番号）
+    public List<DifficultyData> difficulties = new List<DifficultyData>();//基本2種類、一部の曲のみ3種類（リストの順番が難易度の番号。譜面が無い難易度はnull）
+
+    //その難易度の譜面があるか
+    public bool HasDifficulty(int difficulty)
+    {
+        return difficulty >= 0 && difficulty < difficulties.Count && difficulties[difficulty] != null;
+    }
 }
 
 [Serializable]

@@ -127,13 +127,11 @@ public static class SongLibrary
             audioPath = FindAudio(folder, songMeta.audioFileName),
         };
 
-        //選曲画面は PARALLEL → INTERPLAY → ELUSIVE と低い難易度から欠けずに並んでいる前提なので、途中が欠けたらそこまでにする
-        for (int i = 0; i < charts.Length && charts[i] != null; i++) song.difficulties.Add(charts[i]);
-        for (int i = song.difficulties.Count; i < charts.Length; i++)
-        {
-            if (charts[i] != null) Debug.LogWarning($"{song.title}: {DifficultyInfo.Names[i]} より低い難易度の譜面が無いので、{DifficultyInfo.Names[i]} は表示しません");
-        }
-        return song.difficulties.Count > 0 ? song : null;
+        //リストの番号を難易度の番号に合わせる。途中の難易度が無い曲（INTERPLAYだけある曲など）はその場所をnullにする
+        int count = charts.Length;
+        while (charts[count - 1] == null) count--;//songMetaがあるので、どれか1つは譜面がある
+        for (int i = 0; i < count; i++) song.difficulties.Add(charts[i]);
+        return song;
     }
 
     //譜面の文字列を読む

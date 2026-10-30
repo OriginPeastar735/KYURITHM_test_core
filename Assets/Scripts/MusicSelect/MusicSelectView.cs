@@ -55,9 +55,9 @@ public class CardInfo
 public class MusicSelectView : MonoBehaviour
 {
     const float CanvasMatch = 0f;//Canvasは横幅基準で拡大縮小する。センサーの位置は画面の横幅で決まるため
-    static readonly float SlopeLength = RefWidth * SensorLayout.SlopeWidthRatio;//斜面センサー1本分の長さ（キャンバス座標）
-    static readonly float SlopeSpan = SlopeLength / Mathf.Sqrt(2f);//斜面が画面下辺・側辺を占める長さ
-    static readonly float BottomWidth = SlopeLength * 2f;//底面センサーの長さ
+    static readonly float SlopeLength = SensorGlow.SlopeLength;//斜面センサー1本分の長さ（キャンバス座標）
+    static readonly float SlopeSpan = SensorGlow.SlopeSpan;//斜面が画面下辺・側辺を占める長さ
+    static readonly float BottomWidth = SensorGlow.BottomWidth;//底面センサーの長さ
 
     //カード。選択中のサイズで作り、選択されていないカードは縮小して表示する
     public const float CardWidth = 540f;
@@ -80,8 +80,8 @@ public class MusicSelectView : MonoBehaviour
     const float ScrollSpeed = 20f;//スクロールの追従の速さ
 
     //操作エリアの光の太さ
-    const float BottomGlowHeight = 70f;
-    const float SlopeGlowHeight = 50f;
+    const float BottomGlowHeight = SensorGlow.BottomHeight;
+    const float SlopeGlowHeight = SensorGlow.SlopeHeight;
 
     [Tooltip("斜面センサーで隠れる部分を暗く表示する（センサー無しのモニターでテストするとき用）")]
     public bool showHiddenArea = true;
@@ -117,7 +117,7 @@ public class MusicSelectView : MonoBehaviour
         this.itemAt = itemAt;
 
         font = CreateFont();
-        gradient = CreateGradientSprite();
+        gradient = SensorGlow.CreateGradientSprite();
 
         root = CreateCanvas("MusicSelectCanvas", 0, CanvasMatch);
 
@@ -370,7 +370,7 @@ public class MusicSelectView : MonoBehaviour
     //触れている間は明るく、触れていない間はゆっくり明滅して操作できる場所を示す
     void UpdateGlows()
     {
-        float idle = 0.25f + 0.06f * Mathf.Sin(Time.time * 2.5f);
+        float idle = SensorGlow.IdleLevel;
         float k = 1f - Mathf.Exp(-20f * Time.deltaTime);
         for (int z = 0; z < glows.Length; z++)
         {
@@ -551,24 +551,6 @@ public class MusicSelectView : MonoBehaviour
             Place(item.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -78f - rowHeight * i), new Vector2(460f, rowHeight - 6f));
             popupItems.Add(item);
         }
-    }
-
-    //下が不透明で上に向かって透明になる縦グラデーション
-    static Sprite CreateGradientSprite()
-    {
-        const int height = 64;
-        var tex = new Texture2D(1, height, TextureFormat.RGBA32, false)
-        {
-            wrapMode = TextureWrapMode.Clamp,
-            filterMode = FilterMode.Bilinear
-        };
-        for (int y = 0; y < height; y++)
-        {
-            float t = y / (float)(height - 1);
-            tex.SetPixel(0, y, new Color(1f, 1f, 1f, (1f - t) * (1f - t)));
-        }
-        tex.Apply();
-        return Sprite.Create(tex, new Rect(0, 0, 1, height), new Vector2(0.5f, 0.5f));
     }
 
     //左が不透明で右に向かって透明になる横グラデーション（画面端の影用）

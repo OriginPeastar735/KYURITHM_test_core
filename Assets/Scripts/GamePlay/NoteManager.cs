@@ -56,6 +56,20 @@ public class NoteManager : MonoBehaviour
         public float bpm;
     }
 
+    [Header("小節線（選曲画面の設定がONのときだけ流す）")]
+    public float barLineThickness = 0.05f;//小節線の太さ（奥行き）
+    public float barLineHeight = 0.012f;//面から浮かせる高さ。判定ライン(約0.0155)・ノーツ(LaneLayout.NoteHeight)より下
+    public float barLineAlpha = 0.6f;
+    private readonly List<BarLine> barLines = new List<BarLine>();//時刻順
+    private Mesh barLineMesh;//全部の小節線で共有する（z位置だけ変える）
+    private Material barLineMaterial;
+
+    private struct BarLine
+    {
+        public GameObject obj;
+        public float bar;//流す位置（DisplayBarの小節数）
+    }
+
     public List<Note> notes = new List<Note>();
     public List<Hold> holds = new List<Hold>();
     public List<LongNote> LongNotes = new List<LongNote>();
@@ -70,6 +84,8 @@ public class NoteManager : MonoBehaviour
 
     void OnDestroy()
     {
+        if (barLineMesh != null) Destroy(barLineMesh);
+        if (barLineMaterial != null) Destroy(barLineMaterial);
         if (centerLineMaterial != null) Destroy(centerLineMaterial);
         if (outlineMaterial != null) Destroy(outlineMaterial);
         if (outlineTexture != null) Destroy(outlineTexture);
@@ -144,7 +160,13 @@ public class NoteManager : MonoBehaviour
         {
             Debug.LogError($"{fileName}: 譜面を読み込めませんでした\n{e.Message}");
         }
-        if (notesData == null) notesData = new ChartData();
+        LoadChart(notesData ?? new ChartData(), fileName);
+    }
+
+    //読み込んだ譜面からノーツを生成する。チュートリアルではTutorialが作った譜面を練習ごとに渡す
+    //前の譜面のノーツがすべて判定され終わってから呼ぶ（BPMやオフセットはこの譜面のものに置き換わる）
+    public void LoadChart(ChartData notesData, string fileName)
+    {
         if (notesData.notes == null) notesData.notes = new List<ChartNoteData>();
         notesData.notes.RemoveAll(note => note == null);
 
@@ -176,7 +198,7 @@ public class NoteManager : MonoBehaviour
             if (note.type == "hold")
                 CreateHoldNote(note.tick, note.lane, note.width, note.type);
             if (note.type == "slide")
-                CreateSlide(note);
+                totalCombo += CreateSlide(note, false);
         }
 
         //判定と表示の処理は、リストが時刻順に並んでいることを前提に途中で打ち切る
@@ -184,13 +206,39 @@ public class NoteManager : MonoBehaviour
         holds.Sort((a, b) => a.expectedTime.CompareTo(b.expectedTime));
         LongNotes.Sort((a, b) => a.startExpectedTime.CompareTo(b.startExpectedTime));
 
+        //小節線はプレイ中だけ（チュートリアルでは出さない）
+        if (PlaySession.ShowBarLines && !PlaySession.IsTutorial) CreateBarLines(notesData.notes);
+
         Debug.Log($"Notes:{totalCombo}");
         //エディタと数え方がずれていると、スコアの理論値が101万点にならない
         if (notesData.meta != null && notesData.meta.totalNotes.HasValue && notesData.meta.totalNotes.Value != totalCombo)
         {
             Debug.LogWarning($"{fileName}: 総ノーツ数がエディタの値({notesData.meta.totalNotes.Value})と一致しません。古いエディタで出力した譜面の可能性があります");
         }
+
+        //生成したノーツは判定ライン(z=0)に置かれているので、すぐ流れてくる位置へ動かす
+        //（このフレームのUpdateが済んだ後に読み込むと、1フレームだけ判定ラインの所に見えてしまうため）
+        UpdatePositions();
     }
+
+    //ノーツが壁（見え始める位置）から判定ラインまで流れてくる秒数
+    //基本BPMでの1小節の秒数
+    public float BarSeconds => barMillis;
+
+    //一番早いノーツが判定ラインに来る時刻（曲の再生時間、秒）。ノーツが無ければ0
+    public float FirstNoteTime
+    {
+        get
+        {
+            float first = float.MaxValue;
+            if (notes.Count > 0) first = Mathf.Min(first, notes[0].expectedTime);
+            if (holds.Count > 0) first = Mathf.Min(first, holds[0].expectedTime);
+            if (LongNotes.Count > 0) first = Mathf.Min(first, LongNotes[0].startExpectedTime);
+            return first == float.MaxValue ? 0f : first;
+        }
+    }
+
+    public float TravelSeconds => LaneLayout.VisibleLength / (PlaySession.HiSpeed * speedPerHiSpeed);
 
     //基本BPMとBPM変更線からBPMの変化を作る（同じtickに複数ある場合は後のものを使う）
     private void BuildBpmTimeline(List<ChartNoteData> notes)
@@ -272,16 +320,32 @@ public class NoteManager : MonoBehaviour
         holds.Add(hold);
     }
 
-    //slideはセクションごとに1つのLongNoteとして生成する
+    //譜面のノーツ数（判定の回数）を、ノーツを生成せずに数える。チュートリアルで全練習の合計からスコアを計算するのに使う
+    //BPMの変化はこの譜面のものに置き換わるので、ノーツを流している間は呼ばない
+    public int CountNotes(ChartData notesData)
+    {
+        bpm = notesData.meta != null && notesData.meta.bpm > 0 ? notesData.meta.bpm : 120f;
+        BuildBpmTimeline(notesData.notes);
+        int count = 0;
+        foreach (var note in notesData.notes)
+        {
+            if (note.type == "tap" || note.type == "hold") count += 1;
+            if (note.type == "slide") count += CreateSlide(note, true);
+        }
+        return count;
+    }
+
+    //slideはセクションごとに1つのLongNoteとして生成する。戻り値は判定の回数
     //ノーツ数 = 始点 + 中間 + 一定間隔判定 + 終点（エディタのSPEC SLIDEと同じ数え方）
-    private void CreateSlide(ChartNoteData note)
+    //countOnly: 数えるだけで生成しない
+    private int CreateSlide(ChartNoteData note, bool countOnly)
     {
         var sections = note.sections;
-        if (sections == null || sections.Count == 0) return;
+        if (sections == null || sections.Count == 0) return 0;
         if (sections.Exists(section => section == null || section.from == null || section.to == null))
         {
-            Debug.LogWarning($"始点・終点の無いセクションがあるslideを読み飛ばしました（tick {note.tick}）");
-            return;
+            if (!countOnly) Debug.LogWarning($"始点・終点の無いセクションがあるslideを読み飛ばしました（tick {note.tick}）");
+            return 0;
         }
 
         //分岐の接続点は親slideの中間ノーツとして判定するので、こちらでは判定も表示もしない
@@ -289,7 +353,7 @@ public class NoteManager : MonoBehaviour
         bool startIsShared = isBranch && note.branchType == "end";
         bool endIsShared = isBranch && note.branchType == "start";
 
-        if (!startIsShared) totalCombo += 1;//始点のタップ判定
+        int count = startIsShared ? 0 : 1;//始点のタップ判定
         for (int i = 0; i < sections.Count; i++)
         {
             var section = sections[i];
@@ -297,6 +361,8 @@ public class NoteManager : MonoBehaviour
             float startExpectedTime = ExpectedTime(section.from.tick);
             float endExpectedTime = ExpectedTime(section.to.tick);
             List<float> checkpointTimes = SlideCheckpointTimes(section.from.tick, section.to.tick, !(isLast && endIsShared));
+            count += checkpointTimes.Count;
+            if (countOnly) continue;
 
             GameObject obj = Instantiate(LongNotePrefab);
             LongNote longNote = obj.GetComponent<LongNote>();
@@ -308,8 +374,8 @@ public class NoteManager : MonoBehaviour
                           LongNote.ParseCurve(section.curve));
 
             LongNotes.Add(longNote);
-            totalCombo += checkpointTimes.Count;
         }
+        return count;
     }
 
     //セクション中の判定点の時刻。始点(または中間)から一定間隔で置き、終点(または次の中間)にも置く
@@ -337,13 +403,21 @@ public class NoteManager : MonoBehaviour
         return (expectedTime - startTime) / barMillis;
     }
 
-    //リストは時刻順なので、壁より奥にあって既に非表示になっているノーツが来たら、それ以降は動かさない
-    //（生成直後は表示状態なので、最初のフレームで一度すべて動かして壁より奥のものを非表示にする）
     void Update()
     {
+        UpdatePositions();
+    }
+
+    //リストは時刻順なので、壁より奥にあって既に非表示になっているノーツが来たら、それ以降は動かさない
+    //（生成直後は表示状態なので、一度すべて動かして壁より奥のものを非表示にする）
+    private void UpdatePositions()
+    {
+        if (MusicManager.instance == null) return;
         float currentTime = MusicManager.instance.CurrentPlayTime;
         float presentBar = (currentTime - startTime) / barMillis;
         float farBar = presentBar + LaneLayout.VisibleLength / scrollSpeed;//壁の位置の小節位置
+
+        UpdateBarLines(presentBar, farBar);
 
         foreach (var note in notes)
         {
@@ -365,6 +439,89 @@ public class NoteManager : MonoBehaviour
             if (!longNote.gameObject.activeSelf && longNote.startBar > farBar) break;
             longNote.UpdatePosition(presentBar);
         }
+    }
+
+    // ===== 小節線 =====
+    //tick 0から最後のノーツのある小節まで、1小節(barPertick)ごとに小節線を置く
+    //tickで区切るので、BPM変更があっても譜面の小節に合う
+    private void CreateBarLines(List<ChartNoteData> chartNotes)
+    {
+        foreach (BarLine line in barLines) Destroy(line.obj);
+        barLines.Clear();
+
+        float lastTick = 0f;
+        foreach (var note in chartNotes)
+        {
+            if (note.type == "bpm") continue;
+            lastTick = Mathf.Max(lastTick, note.tick);
+            if (note.sections == null) continue;
+            foreach (var section in note.sections)
+            {
+                if (section?.to != null) lastTick = Mathf.Max(lastTick, section.to.tick);
+            }
+        }
+
+        if (barLineMaterial == null && LaneFieldBuilder.instance != null) barLineMaterial = LaneFieldBuilder.instance.CreateBarLineMaterial(barLineAlpha);
+        if (barLineMaterial == null) return;
+        if (barLineMesh == null) barLineMesh = CreateBarLineMesh();
+
+        for (float tick = 0f; tick <= lastTick + 1e-3f; tick += barPertick)
+        {
+            var obj = new GameObject("BarLine", typeof(MeshFilter), typeof(MeshRenderer));
+            obj.GetComponent<MeshFilter>().sharedMesh = barLineMesh;
+            var rend = obj.GetComponent<MeshRenderer>();
+            rend.sharedMaterial = barLineMaterial;
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+            obj.SetActive(false);//壁より手前に来たら出す
+            barLines.Add(new BarLine { obj = obj, bar = DisplayBar(ExpectedTime(tick)) });
+        }
+    }
+
+    //判定ラインを過ぎた小節線は消し、壁より手前のものを動かす（時刻順なので、壁より奥のものが来たら打ち切る）
+    private void UpdateBarLines(float presentBar, float farBar)
+    {
+        while (barLines.Count > 0 && barLines[0].bar < presentBar)
+        {
+            Destroy(barLines[0].obj);
+            barLines.RemoveAt(0);
+        }
+        foreach (BarLine line in barLines)
+        {
+            if (line.bar > farBar) break;
+            if (!line.obj.activeSelf) line.obj.SetActive(true);
+            line.obj.transform.localPosition = new Vector3(0f, 0f, (presentBar - line.bar) * scrollSpeed);
+        }
+    }
+
+    //左の傾斜・水平・右の傾斜の3区間を横切る細い板（z=0が線の真ん中）。面に沿わせて浮かせる
+    private Mesh CreateBarLineMesh()
+    {
+        float[] folds = { 0f, LaneLayout.LeftFold, LaneLayout.RightFold, InputManager.LaneCount };
+        const float inset = 0.001f;//折れ目ちょうどだと隣の区間の傾きになるので、区間の内側の点で傾きを決める
+        float half = barLineThickness / 2f;
+        var vertices = new List<Vector3>();
+        var normals = new List<Vector3>();
+        var triangles = new List<int>();
+        for (int s = 0; s + 1 < folds.Length; s++)
+        {
+            float from = folds[s] + inset;
+            float to = folds[s + 1] - inset;
+            int first = vertices.Count;
+            vertices.Add(LaneLayout.SurfacePoint(from, barLineHeight, -half));
+            vertices.Add(LaneLayout.SurfacePoint(from, barLineHeight, half));
+            vertices.Add(LaneLayout.SurfacePoint(to, barLineHeight, -half));
+            vertices.Add(LaneLayout.SurfacePoint(to, barLineHeight, half));
+            Vector3 up = LaneLayout.SurfaceRotation((from + to) / 2f) * Vector3.up;
+            for (int i = 0; i < 4; i++) normals.Add(up);
+            triangles.AddRange(new[] { first, first + 1, first + 2, first + 2, first + 1, first + 3 });
+        }
+        var mesh = new Mesh { name = "BarLine" };
+        mesh.SetVertices(vertices);
+        mesh.SetNormals(normals);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateBounds();
+        return mesh;
     }
 
     //譜面を読み込んだ後に、tap/hold/slideがすべて判定されてリストが空になったか（曲の終了判定に使う）
