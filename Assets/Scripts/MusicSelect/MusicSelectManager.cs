@@ -62,8 +62,8 @@ public class MusicSelectManager : MonoBehaviour
     enum Phase { SelectSong, Confirm, Settings }
 
     //ソートボタンを押すとこの順に切り替わる（端まで行くと反対側に戻る）
-    enum SortMode { TitleAsc, TitleDesc, LevelAsc, LevelDesc, ScoreAsc, ScoreDesc }
-    static readonly string[] sortNames = { "曲名 昇順", "曲名 降順", "レベル 昇順", "レベル 降順", "スコア 昇順", "スコア 降順" };
+    enum SortMode { LevelAsc, LevelDesc, TitleAsc, TitleDesc, ScoreAsc, ScoreDesc }
+    static readonly string[] sortNames = { "レベル 昇順", "レベル 降順", "曲名 昇順", "曲名 降順", "スコア 昇順", "スコア 降順" };
 
     //設定カード1枚分
     class SettingItem
@@ -79,7 +79,7 @@ public class MusicSelectManager : MonoBehaviour
 
     private List<SongData> songs;
     private List<int> order = new List<int>();//今の難易度がある曲だけをソートした並び（songsのインデックス）
-    private SortMode sortMode = SortMode.TitleAsc;
+    private SortMode sortMode = SortMode.LevelAsc;
     private int difficulty = 0;//選んでいる難易度。最初はどれかの曲にある一番低い難易度
     private List<SettingItem> settings;
 
@@ -249,10 +249,15 @@ public class MusicSelectManager : MonoBehaviour
     }
 
     //プリセットのカードを開く・閉じる。プリセットカードは位置が変わらないので、右側のカードだけが入れ替わる
+    //各プリセットのカードは、プリセットカードの裏から広がって出てきて、閉じるときは裏へ畳まれる
     void TogglePresets()
     {
-        presetsOpen = !presetsOpen;
-        view.RefreshCards();
+        bool open = !presetsOpen;
+        view.Fold(PresetPosition, PlayPreset.All.Length, open, () =>
+        {
+            presetsOpen = open;
+            view.RefreshCards();
+        });
     }
 
     void ApplyPreset(PlayPreset preset)
@@ -609,14 +614,10 @@ public class MusicSelectManager : MonoBehaviour
                 canChange = d => d < 0 ? PlaySession.HiSpeed > 1.05f : PlaySession.HiSpeed < 9.95f,
                 change = d => PlaySession.HiSpeed = Mathf.Clamp(Mathf.Round((PlaySession.HiSpeed + d * 0.1f) * 10f) / 10f, 1f, 10f),
             },
-            new SettingItem
-            {
-                name = "タイミング調整",
-                description = "判定のタイミングをずらす",
-                value = () => $"{PlaySession.TimingOffsetMs:+0;-0;0}ms",
-                canChange = d => d < 0 ? PlaySession.TimingOffsetMs > -100 : PlaySession.TimingOffsetMs < 100,
-                change = d => PlaySession.TimingOffsetMs = Mathf.Clamp(PlaySession.TimingOffsetMs + d * 5, -100, 100),
-            },
+            OffsetSetting("楽曲タイミング", "曲とノーツのずれを直す（音が遅れて聞こえるなら+）",
+                () => PlaySession.SongOffsetMs, v => PlaySession.SongOffsetMs = v, 200),
+            OffsetSetting("判定タイミング", "見た目はそのままで判定だけずらす（LATEが多いなら+）",
+                () => PlaySession.JudgeOffsetMs, v => PlaySession.JudgeOffsetMs = v, 100),
             PercentSetting("壁", "レーンの奥側を見えなくする（0%で全部見える）",
                 () => PlaySession.WallPercent, v => PlaySession.WallPercent = v, 0, 100, 5),
             PercentSetting("レーンの濃さ", "0%でレーンが透明、100%で背景が見えない",
@@ -666,6 +667,19 @@ public class MusicSelectManager : MonoBehaviour
 
     //分割線の設定で選べるレーン数。+を押すほど細かくなる（0はなし）
     static readonly int[] lineDivisions = { 0, 8, 4, 2, 1 };
+
+    //-range〜+rangeのmsを5ms刻みで変えるタイミングの設定
+    static SettingItem OffsetSetting(string name, string description, Func<int> get, Action<int> set, int range)
+    {
+        return new SettingItem
+        {
+            name = name,
+            description = description,
+            value = () => $"{get():+0;-0;0}ms",
+            canChange = d => d < 0 ? get() > -range : get() < range,
+            change = d => set(Mathf.Clamp(get() + d * 5, -range, range)),
+        };
+    }
 
     //min〜maxの%をstep刻みで変える設定
     static SettingItem PercentSetting(string name, string description, Func<int> get, Action<int> set, int min, int max, int step)
@@ -737,23 +751,27 @@ public class MusicSelectManager : MonoBehaviour
             squareTextSize = 56,
             title = "プレイ設定",
             titleSize = 32,
-            subtitle = $"ハイスピード {PlaySession.HiSpeed:0.0} / タイミング {PlaySession.TimingOffsetMs:+0;-0;0}ms",
+            subtitle = $"ハイスピード {PlaySession.HiSpeed:0.0} / 楽曲 {PlaySession.SongOffsetMs:+0;-0;0}ms / 判定 {PlaySession.JudgeOffsetMs:+0;-0;0}ms",
             subtitleSize = 26,
         };
     }
 
     static readonly Color presetColor = new Color(0.36f, 0.42f, 0.36f);
+    static readonly Color appliedFrameColor = new Color(1f, 0.85f, 0.3f);//適用中のプリセットのカードを囲む枠
 
+    //適用中のプリセットがあれば、ジャケットの位置にその名前を出す（適用した後に設定を変えたら出さない）
     CardInfo PresetsCard()
     {
+        PlayPreset applied = PlayPreset.Applied;
         return new CardInfo
         {
             background = presetColor,
             topSmall = "PRESET",
             topLarge = "おすすめ",
-            squareColor = new Color(0.22f, 0.27f, 0.22f),
-            squareText = "PRESET",
-            squareTextSize = 64,
+            squareColor = applied != null ? Color.Lerp(applied.color, Color.black, 0.3f) : new Color(0.22f, 0.27f, 0.22f),
+            squareBorder = applied != null ? appliedFrameColor : Color.clear,
+            squareText = applied != null ? $"適用中\n{applied.name}" : "PRESET",
+            squareTextSize = applied != null ? 60 : 64,
             title = "おすすめプリセット",
             titleSize = 32,
             subtitle = presetsOpen ? "決定で閉じる" : "決定で初心者向け・上級者向けを表示",
@@ -773,7 +791,8 @@ public class MusicSelectManager : MonoBehaviour
             $"背景の明るさ {preset.backgroundBrightness}%\n" +
             $"キービーム {preset.keyBeam}%\n" +
             $"ノーツの太さ {preset.noteThickness}%\n" +
-            $"FAST/LATE {(preset.showFastLate ? "ON" : "OFF")}";
+            $"FAST/LATE {(preset.showFastLate ? "ON" : "OFF")}\n" +
+            $"楽曲タイミング {preset.songOffset:+0;-0;0}ms";
         return new CardInfo
         {
             background = preset.color,
@@ -785,6 +804,7 @@ public class MusicSelectManager : MonoBehaviour
             title = preset.description,
             titleSize = 28,
             subtitle = preset.IsApplied ? "適用中" : "決定で適用",
+            frame = preset.IsApplied ? appliedFrameColor : Color.clear,
             subtitleSize = 28,
         };
     }

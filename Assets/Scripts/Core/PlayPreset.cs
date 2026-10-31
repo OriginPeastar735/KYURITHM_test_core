@@ -1,6 +1,7 @@
 using UnityEngine;
 
-//おすすめプリセット1つ分。設定を変えるのが面倒な人向けに、設定カードの値をまとめて変える（タイミング調整は人や筐体で違うので変えない）
+//おすすめプリセット1つ分。設定を変えるのが面倒な人向けに、設定カードの値をまとめて変える
+//楽曲タイミングは0に戻す（環境による音の遅れは筐体の調整で合わせてある）。判定タイミングは人によって違うので変えない
 //選曲画面のプリセットカードと、チュートリアル（初心者向けで遊ばせる）で使う
 public class PlayPreset
 {
@@ -16,19 +17,20 @@ public class PlayPreset
     public int keyBeam;
     public int noteThickness;
     public bool showFastLate;
+    public int songOffset;
 
     public static readonly PlayPreset Beginner = new PlayPreset
     {
         name = "初心者向け", description = "ゆっくり流れて見やすい設定", color = new Color(0.3f, 0.6f, 0.42f),
         hiSpeed = 3f, wall = 0, laneOpacity = 90, lineDivision = 4, lineOpacity = 50,
-        backgroundBrightness = 70, keyBeam = 80, noteThickness = 100, showFastLate = false,
+        backgroundBrightness = 70, keyBeam = 30, noteThickness = 100, showFastLate = false, songOffset = 0,
     };
 
     public static readonly PlayPreset Advanced = new PlayPreset
     {
         name = "上級者向け", description = "速く流れてノーツの間隔が詰まりにくい設定", color = new Color(0.62f, 0.3f, 0.36f),
         hiSpeed = 7f, wall = 0, laneOpacity = 90, lineDivision = 2, lineOpacity = 20,
-        backgroundBrightness = 70, keyBeam = 50, noteThickness = 100, showFastLate = true,
+        backgroundBrightness = 70, keyBeam = 30, noteThickness = 100, showFastLate = true, songOffset = 0,
     };
 
     //選曲画面のプリセットカードに並べる順
@@ -48,6 +50,7 @@ public class PlayPreset
             keyBeam = PlaySession.KeyBeamPercent,
             noteThickness = PlaySession.NoteThicknessPercent,
             showFastLate = PlaySession.ShowFastLate,
+            songOffset = PlaySession.SongOffsetMs,
         };
     }
 
@@ -62,7 +65,11 @@ public class PlayPreset
         PlaySession.KeyBeamPercent = keyBeam;
         PlaySession.NoteThicknessPercent = noteThickness;
         PlaySession.ShowFastLate = showFastLate;
+        PlaySession.SongOffsetMs = songOffset;
     }
+
+    //今の設定と同じプリセット。どれとも違えば（適用した後に設定を変えたら）null
+    public static PlayPreset Applied => System.Array.Find(All, p => p.IsApplied);
 
     //今の設定がこのプリセットと同じか（カードに「適用中」と出す）
     public bool IsApplied =>
@@ -74,5 +81,6 @@ public class PlayPreset
         && PlaySession.BackgroundBrightnessPercent == backgroundBrightness
         && PlaySession.KeyBeamPercent == keyBeam
         && PlaySession.NoteThicknessPercent == noteThickness
-        && PlaySession.ShowFastLate == showFastLate;
+        && PlaySession.ShowFastLate == showFastLate
+        && PlaySession.SongOffsetMs == songOffset;
 }

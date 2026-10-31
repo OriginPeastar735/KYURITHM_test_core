@@ -25,10 +25,10 @@ public class JudgeManager : MonoBehaviour
 
     //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
-    public float precisePlusMs = 30f;
-    public float preciseMs = 60f;
-    public float approxMs = 100f;
-    public float missMs = 120f;//approxMsより外でもこの範囲内で押すとMISS（早押し・遅押しでノーツを消費する）
+    public float precisePlusMs = 40f;
+    public float preciseMs = 70f;
+    public float approxMs = 110f;
+    public float missMs = 130f;//approxMsより外でもこの範囲内で押すとMISS（早押し・遅押しでノーツを消費する）
 
     //スライドノーツの判定猶予設定
     [Header("slide")]
@@ -36,9 +36,11 @@ public class JudgeManager : MonoBehaviour
     public int slideLaneMargin = 0;//slideの範囲を左右に何レーン広げて判定するか（判定を甘くしたい場合に使う）
 
 
-    private float currentPlayTime;//このフレームの曲の再生時間（秒）
+    private float currentPlayTime;//このフレームの判定に使う時刻（秒）。曲の再生時間から判定タイミングの調整を引いたもの
     //入力を受け付ける一番外側の範囲（秒）。これを過ぎたノーツは見逃しMISSになる
     private float MissWindow => missMs / 1000f;
+    //判定タイミングの調整(秒)。筐体の調整＋選曲画面の設定。押した時刻と判定する時刻をこれだけ早めて扱うので、+にすると遅めに押してちょうどになる
+    private static float JudgeOffset => (DisplayFit.Current.judgeOffsetMs + PlaySession.JudgeOffsetMs) / 1000f;
 
     //このフレームで既に判定に使った入力。1回の入力で複数ノーツを取らないようにする
     private readonly bool[] consumed = new bool[InputManager.LaneCount];
@@ -59,7 +61,8 @@ public class JudgeManager : MonoBehaviour
     {
         if (MusicManager.instance == null || NoteManager.instance == null || InputManager.instance == null) return;
 
-        currentPlayTime = MusicManager.instance.CurrentPlayTime;
+        float judgeOffset = JudgeOffset;
+        currentPlayTime = MusicManager.instance.CurrentPlayTime - judgeOffset;
 
         //入力を未使用に戻し、このフレームで押されたレーンの押した時刻を曲の再生時間に直す
         Array.Clear(consumed, 0, consumed.Length);
@@ -68,7 +71,7 @@ public class JudgeManager : MonoBehaviour
         for (int i = 0; i < InputManager.LaneCount; i++)
         {
             if (!InputManager.instance.laneDown[i]) continue;
-            pressTime[i] = MusicManager.instance.ToPlayTime(InputManager.instance.laneDownTimestamp[i]);
+            pressTime[i] = MusicManager.instance.ToPlayTime(InputManager.instance.laneDownTimestamp[i]) - judgeOffset;
             latestPressTime = Mathf.Max(latestPressTime, pressTime[i]);
             anyDown = true;
         }

@@ -30,8 +30,8 @@ public class MusicManager : MonoBehaviour
     //曲を再生してよいか（音源の読み込みが終わっていて、楽曲紹介も終わっている）
     private bool CanStart => audioReady && !PlaySession.WaitingForIntro;
 
-    //選曲画面で設定したタイミング調整(秒)。+にするとノーツの到着と判定が遅れる（音が遅れて聞こえる環境向け）
-    private float TimingOffset => PlaySession.TimingOffsetMs / 1000f;
+    //楽曲タイミングの調整(秒)。筐体の調整＋選曲画面の設定。+にするとノーツの到着と判定が遅れる（音が遅れて聞こえる環境向け）
+    private float TimingOffset => (DisplayFit.Current.songOffsetMs + PlaySession.SongOffsetMs) / 1000f;
 
     //曲を最後まで再生し終えたか（リザルトを出すタイミングに使う）
     //再生予約したdspTimeから曲の長さが過ぎたらtrue。音源が無い場合は曲の長さが分からないのでtrue（ノーツの終わりで判断する）

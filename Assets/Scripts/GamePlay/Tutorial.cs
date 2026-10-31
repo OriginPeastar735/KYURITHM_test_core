@@ -16,7 +16,7 @@ public class Tutorial : MonoBehaviour
     const float Bpm = 120f;//練習の譜面のBPM（1拍0.5秒）
     const float TicksPerBeat = 480f;//1小節1920tickの4分の1
     const float TextSeconds = 5f;//ノーツを流す前に説明だけを見せる時間
-    const float LeadSeconds = 0.5f;//ノーツが壁から見え始めるまでの少しの間
+    const float LeadSeconds = 0.1f;//説明を消し始めてから、ノーツが壁から見え始めるまでの間
     const float StepGapSeconds = 1f;//最後のノーツの判定から次の説明までの間
     const float SkipSeconds = 3f;//3面をこの秒数触り続けるとスキップ
 
@@ -192,7 +192,8 @@ public class Tutorial : MonoBehaviour
     }
 
     //チュートリアルを終えて選曲画面へ移る（最後まで練習した場合も、スキップした場合も）
-    void Finish()
+    //immediate: 運営のプレイスキップ（GameManager）。演出なしですぐ切り替える
+    public void Finish(bool immediate = false)
     {
         if (finished) return;
         finished = true;
@@ -201,7 +202,8 @@ public class Tutorial : MonoBehaviour
         //チュートリアル用の初心者向け設定から、始める前の設定に戻す
         if (PlaySession.SettingsBeforeTutorial != null) PlaySession.SettingsBeforeTutorial.Apply();
         PlaySession.SettingsBeforeTutorial = null;
-        SceneFader.FadeTo(GameScene.MusicSelect, Color.black);
+        if (immediate) SceneLoader.ChangeScene(GameScene.MusicSelect);
+        else SceneFader.FadeTo(GameScene.MusicSelect, Color.black);
     }
 
     IEnumerator Run()
@@ -215,12 +217,12 @@ public class Tutorial : MonoBehaviour
             //底面だけを使う練習の間は、斜面の床を黒くして線も消す（斜面の練習で元に戻る）
             if (LaneFieldBuilder.instance != null) LaneFieldBuilder.instance.SetSlopesHidden(!step.useSlopes);
             yield return ShowText(step.heading, step.body);
-            yield return HideText();
 
-            //ノーツは今から少し後に壁から見え始めるように、譜面のオフセットを今の時刻に合わせる
+            //説明を消し始めてすぐ、ノーツが壁から見え始めるように、譜面のオフセットを今の時刻に合わせる（説明が消えるのを待つと間延びするため）
             //前の練習のノーツはすべて判定済みなので、オフセットを置き換えてよい
             float firstNoteTime = MusicManager.instance.CurrentPlayTime + NoteManager.instance.TravelSeconds + LeadSeconds;
             NoteManager.instance.LoadChart(Chart(step.notes, firstNoteTime), "tutorial_" + (i + 1));
+            yield return HideText();
             while (!NoteManager.instance.AllNotesCleared) yield return null;
             yield return new WaitForSeconds(StepGapSeconds);
         }

@@ -8,7 +8,8 @@ public class TrackResult
     public int score;
     public int precisePlus, precise, approx, miss;
     public int fast, late;//PRECISE・APPROXのうち早かった数・遅かった数（PRECISE+は数えない）
+    public bool skipped;//プレイスキップした（スコアは0で、最終リザルトにはスコアの代わりに"Skipped"と出す）
 
-    public bool IsAllPrecise => miss == 0 && approx == 0;
-    public bool IsFullCombo => miss == 0;
+    public bool IsAllPrecise => !skipped && miss == 0 && approx == 0;
+    public bool IsFullCombo => !skipped && miss == 0;
 }

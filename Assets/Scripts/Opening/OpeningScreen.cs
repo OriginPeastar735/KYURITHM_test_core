@@ -16,15 +16,13 @@ using static UIUtil;
 public class OpeningScreen : MonoBehaviour
 {
     static readonly Color TextColor = new Color(0.12f, 0.13f, 0.16f);
-    static readonly Color SubTextColor = new Color(0.12f, 0.13f, 0.16f, 0.6f);
     //チュートリアルを聞くパネルは、オープニングが透けないよう不透明な暗い背景に白い文字（選曲画面と同じ背景色）
     static readonly Color QuestionBackground = new Color(0.05f, 0.06f, 0.12f);
     static readonly Color QuestionTextColor = Color.white;
-    static readonly Color QuestionSubTextColor = new Color(1f, 1f, 1f, 0.6f);
 
-    [SerializeField] private float slideSeconds = 4f;//1枚を見せている時間（フェードの時間は含まない）
+    [SerializeField] private float slideSeconds = 3.5f;//1枚を見せている時間（フェードの時間は含まない）
     [SerializeField] private float fadeSeconds = 0.4f;//1枚のフェードイン・フェードアウトそれぞれの時間
-    [SerializeField] private float inputLockSeconds = 0.5f;//開始直後は入力を受け付けない（リザルトから戻ったときの押しっぱなし対策）
+    [SerializeField] private float inputLockSeconds = 1f;//開始直後は入力を受け付けない（リザルトから戻ったときの押しっぱなし対策）
     [SerializeField] private float exitSeconds = 0.9f;//白く覆うまでの時間
     [SerializeField] private float revealSeconds = 0.6f;//次のシーンの上で覆いを外す時間
     [SerializeField] private float questionTimeoutSeconds = 20f;//チュートリアルが必要か聞く制限時間。答えが無ければオープニングに戻る
@@ -131,6 +129,12 @@ public class OpeningScreen : MonoBehaviour
             startTime = Time.time;
             return;
         }
+        //F9で画面合わせ・タイミング合わせをやり直す（今の設定から直す）
+        if (Input.GetKeyDown(KeyCode.F9))
+        {
+            DisplayFit.OpenSetup();
+            return;
+        }
         if (Time.time - startTime >= inputLockSeconds && AnyPressed()) Ask();
     }
 
@@ -196,11 +200,11 @@ public class OpeningScreen : MonoBehaviour
         });
     }
 
-    //選曲画面と同じく、残り10秒から赤くする
+    //残り3秒から赤くする
     void SetTimer(int seconds)
     {
         timerText.text = seconds.ToString();
-        timerText.color = seconds <= 10 ? new Color(1f, 0.35f, 0.3f) : QuestionTextColor;
+        timerText.color = seconds <= 3 ? new Color(1f, 0.35f, 0.3f) : QuestionTextColor;
     }
 
     //曲を流さずにPlaySceneを開き、Tutorialが練習用のノーツを流す
@@ -362,7 +366,7 @@ public class OpeningScreen : MonoBehaviour
             Text name = CreateText("Name" + i, slide, credit.name, 52, TextAnchor.MiddleCenter, FontStyle.Bold);
             Place(name.rectTransform, position + new Vector2(0f, 16f), new Vector2(640f, 64f));
             Text affiliation = CreateText("Affiliation" + i, slide, credit.department + "　" + credit.year, 30, TextAnchor.MiddleCenter);
-            affiliation.color = SubTextColor;
+            affiliation.color = Color.black;
             Place(affiliation.rectTransform, position + new Vector2(0f, -34f), new Vector2(640f, 40f));
         }
         return slide.GetComponent<CanvasGroup>();
@@ -376,13 +380,10 @@ public class OpeningScreen : MonoBehaviour
 
         Text heading = CreateText("Heading", panel, "チュートリアルをプレイしますか？", 80, TextAnchor.MiddleCenter, FontStyle.Bold);
         heading.color = QuestionTextColor;
-        Place(heading.rectTransform, new Vector2(0f, 200f), new Vector2(1600f, 120f));
-        Text note = CreateText("Note", panel, "ノーツの種類と叩き方を練習できます", 36, TextAnchor.MiddleCenter);
-        note.color = QuestionSubTextColor;
-        Place(note.rectTransform, new Vector2(0f, 100f), new Vector2(1600f, 60f));
+        Place(heading.rectTransform, new Vector2(0f, 180f), new Vector2(1600f, 120f));
 
-        BuildAnswer(panel,"いいえ", "すぐに選曲へ", new Vector2(-480f, -200f));
-        BuildAnswer(panel,"はい", "遊び方を練習する", new Vector2(480f, -200f));
+        BuildAnswer(panel, "いいえ", new Vector2(-480f, -160f));
+        BuildAnswer(panel, "はい", new Vector2(480f, -160f));
 
         //制限時間（右上）。選曲画面と同じ位置・大きさ
         var timer = CreateRect("Timer", panel);
@@ -404,7 +405,7 @@ public class OpeningScreen : MonoBehaviour
     {
         RectTransform slope = SensorGlow.SlopeRect(parent, left ? "NoSlope" : "YesSlope", left);
         Image image = SensorGlow.WholeSlope(slope, "Glow", color, gradient);
-        Text text = CreateText("Label", slope, label, 30, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Text text = CreateText("Label", slope, label, 38, TextAnchor.MiddleCenter, FontStyle.Bold);
         text.color = QuestionTextColor;
         Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
               new Vector2(0f, SensorGlow.SlopeHeight / 2f), new Vector2(SensorGlow.SlopeLength / 2f, SensorGlow.SlopeHeight));
@@ -431,14 +432,11 @@ public class OpeningScreen : MonoBehaviour
         return false;
     }
 
-    void BuildAnswer(RectTransform parent, string answer, string detail, Vector2 position)
+    void BuildAnswer(RectTransform parent, string answer, Vector2 position)
     {
         Text answerText = CreateText("Answer", parent, answer, 96, TextAnchor.MiddleCenter, FontStyle.Bold);
         answerText.color = QuestionTextColor;
         Place(answerText.rectTransform, position, new Vector2(600f, 120f));
-        Text detailText = CreateText("Detail", parent, detail, 34, TextAnchor.MiddleCenter);
-        detailText.color = QuestionSubTextColor;
-        Place(detailText.rectTransform, position + new Vector2(0f, -85f), new Vector2(600f, 50f));
     }
 
     //1枚分の入れ物。最初は透明

@@ -56,7 +56,9 @@ public static class PlaySession
     }
 
     public static float HiSpeed;//ノーツの速さ
-    public static int TimingOffsetMs = 0;//判定タイミングの調整(ms)。+にするとノーツの到着と判定が遅れる
+    //タイミングの調整(ms)。筐体ごとの調整（DisplayFit.Current）に足して使う
+    public static int SongOffsetMs;//楽曲タイミング。+にすると曲に対してノーツの到着と判定が遅れる（音が遅れて聞こえる環境向け）
+    public static int JudgeOffsetMs = 0;//判定タイミング。+にするとノーツの見た目はそのままで判定だけ遅れる（遅れて押しがちな人向け）
     public static int WallPercent;//壁の位置。レーンの奥側から何%を見えなくするか（0%で全部見える、100%で何も見えない）
     public static int LaneOpacityPercent;//レーンの床の濃さ（0%で透明、100%で背景が見えない）
     public static int BackgroundBrightnessPercent;//プレイ中の背景の明るさ（50%〜100%）

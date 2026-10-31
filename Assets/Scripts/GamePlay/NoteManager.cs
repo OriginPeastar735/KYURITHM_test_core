@@ -46,6 +46,7 @@ public class NoteManager : MonoBehaviour
     private float barMillis;//基本BPMでの1小節の秒数。ノーツは時刻をこの小節数に直して流すので、BPMが変わっても流れる速さは一定
     public int destroyedNotesCount = 0;
     public float barPertick = 1920f;//1小節のtick数
+    public const int LeadInBars = 2;//曲の再生を始める前に、小節線だけを流す小節数（基本BPM）。プレイはここから始まる
 
     //BPM変更線を含めたBPMの変化（tick順）。0tickには基本BPMが入る
     private readonly List<BpmChange> bpmTimeline = new List<BpmChange>();
@@ -225,18 +226,8 @@ public class NoteManager : MonoBehaviour
     //基本BPMでの1小節の秒数
     public float BarSeconds => barMillis;
 
-    //一番早いノーツが判定ラインに来る時刻（曲の再生時間、秒）。ノーツが無ければ0
-    public float FirstNoteTime
-    {
-        get
-        {
-            float first = float.MaxValue;
-            if (notes.Count > 0) first = Mathf.Min(first, notes[0].expectedTime);
-            if (holds.Count > 0) first = Mathf.Min(first, holds[0].expectedTime);
-            if (LongNotes.Count > 0) first = Mathf.Min(first, LongNotes[0].startExpectedTime);
-            return first == float.MaxValue ? 0f : first;
-        }
-    }
+    //曲の再生を始める前に待つ秒数（LeadInBars小節）
+    public float LeadInSeconds => LeadInBars * barMillis;
 
     public float TravelSeconds => LaneLayout.VisibleLength / (PlaySession.HiSpeed * speedPerHiSpeed);
 
@@ -442,8 +433,8 @@ public class NoteManager : MonoBehaviour
     }
 
     // ===== 小節線 =====
-    //tick 0から最後のノーツのある小節まで、1小節(barPertick)ごとに小節線を置く
-    //tickで区切るので、BPM変更があっても譜面の小節に合う
+    //曲の再生前のLeadInBars小節ぶんと、tick 0から最後のノーツのある小節まで、1小節(barPertick)ごとに小節線を置く
+    //譜面の小節線はtickで区切るので、BPM変更があっても譜面の小節に合う。再生前の小節線は再生開始(0秒)から基本BPMの1小節ずつさかのぼる
     private void CreateBarLines(List<ChartNoteData> chartNotes)
     {
         foreach (BarLine line in barLines) Destroy(line.obj);
@@ -465,17 +456,21 @@ public class NoteManager : MonoBehaviour
         if (barLineMaterial == null) return;
         if (barLineMesh == null) barLineMesh = CreateBarLineMesh();
 
-        for (float tick = 0f; tick <= lastTick + 1e-3f; tick += barPertick)
-        {
-            var obj = new GameObject("BarLine", typeof(MeshFilter), typeof(MeshRenderer));
-            obj.GetComponent<MeshFilter>().sharedMesh = barLineMesh;
-            var rend = obj.GetComponent<MeshRenderer>();
-            rend.sharedMaterial = barLineMaterial;
-            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            rend.receiveShadows = false;
-            obj.SetActive(false);//壁より手前に来たら出す
-            barLines.Add(new BarLine { obj = obj, bar = DisplayBar(ExpectedTime(tick)) });
-        }
+        for (int i = LeadInBars; i >= 1; i--) AddBarLine(DisplayBar(-i * barMillis));
+        for (float tick = 0f; tick <= lastTick + 1e-3f; tick += barPertick) AddBarLine(DisplayBar(ExpectedTime(tick)));
+    }
+
+    //bar: 流す位置（DisplayBarの小節数）
+    private void AddBarLine(float bar)
+    {
+        var obj = new GameObject("BarLine", typeof(MeshFilter), typeof(MeshRenderer));
+        obj.GetComponent<MeshFilter>().sharedMesh = barLineMesh;
+        var rend = obj.GetComponent<MeshRenderer>();
+        rend.sharedMaterial = barLineMaterial;
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        rend.receiveShadows = false;
+        obj.SetActive(false);//壁より手前に来たら出す
+        barLines.Add(new BarLine { obj = obj, bar = bar });
     }
 
     //判定ラインを過ぎた小節線は消し、壁より手前のものを動かす（時刻順なので、壁より奥のものが来たら打ち切る）

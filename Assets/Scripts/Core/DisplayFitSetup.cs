@@ -2,10 +2,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using static UIUtil;
 
-//初回起動時の画面合わせ。設定ファイルが無いときにDisplayFitが付ける（Windowsのビルドのみ）
+//画面合わせ。設定ファイルが無いときの初回起動時（Windowsのビルドのみ）と、オープニングでF9を押したときに出す
+//今の設定から始めるので、合わせ直すときは少し動かすだけでよい
 //
 //  ウィンドウにゲーム画面の外枠とセンサーの位置（ピンクの線）を描くので、PCのキーボードでウィンドウの大きさと位置を動かして、
-//  ピンクの線が筐体のセンサーに重なるように合わせる。センサーをタッチ（またはEnter）で確定して設定ファイルに保存する
+//  ピンクの線が筐体のセンサーに重なるように合わせる。センサーをタッチ（またはEnter）で確定して設定ファイルに保存し、タイミング合わせに進む
 //  大きさを変えるときは、センサーのある下辺の中央を動かさない
 public class DisplayFitSetup : MonoBehaviour
 {
@@ -20,6 +21,7 @@ public class DisplayFitSetup : MonoBehaviour
     static readonly Color SensorColor = new Color(1f, 0.4f, 0.75f);
 
     private DisplayFit.Settings settings;
+    private DisplayFit.Settings original;//開いたときの設定（Rで戻す）
     private RectTransform canvas;
     private RectTransform bottomSensor, leftSensor, rightSensor;
     private Text valueText;
@@ -27,7 +29,8 @@ public class DisplayFitSetup : MonoBehaviour
 
     void Start()
     {
-        settings = DisplayFit.Current.Clone();
+        original = DisplayFit.Current.Clone();
+        settings = original.Clone();
         openTime = Time.unscaledTime;
         BuildCanvas();
     }
@@ -52,9 +55,9 @@ public class DisplayFitSetup : MonoBehaviour
         rightSensor = CreateImage("RightSensor", canvas, SensorColor).rectTransform;
 
         //縮小すると文字も小さくなるので大きめにする
-        Place(CreateText("Title", canvas, font, Color.white, "画面の大きさ合わせ（初回のみ）", 64, TextAnchor.MiddleCenter, FontStyle.Bold).rectTransform, new Vector2(0f, 260f), new Vector2(1600f, 90f));
+        Place(CreateText("Title", canvas, font, Color.white, "画面の大きさ合わせ", 64, TextAnchor.MiddleCenter, FontStyle.Bold).rectTransform, new Vector2(0f, 260f), new Vector2(1600f, 90f));
         Place(CreateText("Guide", canvas, font, Color.white, "ピンクの線が筐体のセンサーに重なるように、PCのキーボードで合わせてください", 40, TextAnchor.MiddleCenter).rectTransform, new Vector2(0f, 170f), new Vector2(1600f, 60f));
-        Place(CreateText("Keys", canvas, font, new Color(1f, 1f, 1f, 0.75f), "← → ↑ ↓ : 位置　　Z / X : 小さく / 大きく　　Shift : 速く　　R : 元に戻す", 34, TextAnchor.MiddleCenter).rectTransform, new Vector2(0f, 90f), new Vector2(1800f, 50f));
+        Place(CreateText("Keys", canvas, font, new Color(1f, 1f, 1f, 0.75f), "← → ↑ ↓ : 位置　　Z / X : 小さく / 大きく　　Shift : 速く　　R : 開いたときの位置に戻す", 34, TextAnchor.MiddleCenter).rectTransform, new Vector2(0f, 90f), new Vector2(1800f, 50f));
         valueText = CreateText("Value", canvas, font, FrameColor, "", 44, TextAnchor.MiddleCenter);
         Place(valueText.rectTransform, new Vector2(0f, -10f), new Vector2(1600f, 60f));
         Place(CreateText("Confirm", canvas, font, SensorColor, "センサーをタッチ（または Enter）で確定", 56, TextAnchor.MiddleCenter, FontStyle.Bold).rectTransform, new Vector2(0f, -120f), new Vector2(1600f, 80f));
@@ -79,7 +82,7 @@ public class DisplayFitSetup : MonoBehaviour
             settings.left = centerX - settings.scale / 2f;
         }
 
-        if (Input.GetKeyDown(KeyCode.R)) settings = new DisplayFit.Settings();
+        if (Input.GetKeyDown(KeyCode.R)) settings = original.Clone();
 
         DisplayFit.Clamp(settings);
         DisplayFit.Preview(settings);
@@ -119,7 +122,8 @@ public class DisplayFitSetup : MonoBehaviour
     void Close()
     {
         DisplayFit.Confirm(settings);
+        DisplayFit.OpenTimingCalibration();
         Destroy(canvas.gameObject);
-        Destroy(this);
+        Destroy(gameObject);
     }
 }

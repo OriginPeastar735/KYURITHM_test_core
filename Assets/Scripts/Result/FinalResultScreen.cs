@@ -12,7 +12,9 @@ using static UIUtil;
 // ／ジャケット・曲名 ／ 難易度・Lv・スコア・判定数 ／     3曲目
 //                       ／ TOTAL  合計スコア ／ ◇AP     全曲ALL PRECISEならAP、全曲ミス無しならFC
 //
-//帯が順に流れ込み、合計スコアを数え上げた後、どこかのセンサーに触れる（か時間が経つ）とエンディングへ移る
+//帯が順に流れ込み、合計スコアを数え上げた後、どこかのセンサーに触れる（か時間が経つ）とコンティニューするか聞く
+//  右斜面: コンティニュー。設定はそのままで、演出を挟んで選曲画面へ（1曲目から）
+//  左斜面・制限時間切れ: 終了。エンディング（THANK YOU FOR PLAYING!）へ
 public class FinalResultScreen : MonoBehaviour
 {
     //帯の形と並び（キャンバス座標。画面の真ん中が原点）
@@ -35,7 +37,16 @@ public class FinalResultScreen : MonoBehaviour
     static readonly Color BadgeColor = new Color(1f, 0.95f, 0.25f);
 
     [SerializeField] private float inputLockSeconds = 1.5f;//開始直後は入力を受け付けない（リザルトからの押しっぱなし対策）
-    [SerializeField] private float autoLeaveSeconds = 30f;//触れなくてもこの秒数でエンディングへ移る
+    [SerializeField] private float autoLeaveSeconds = 30f;//触れなくてもこの秒数でコンティニューの質問へ移る
+    [SerializeField] private float continueTimeoutSeconds = 20f;//コンティニューの質問の制限時間。答えが無ければ終了
+    const float AnswerLockSeconds = 0.5f;//質問を出した直後は答えを受け付けない（リザルトを閉じたタッチで答えないように）
+
+    const int SlopeLaneCount = 8;
+    static readonly KeyCode[] leftSlopeKeys = { KeyCode.A, KeyCode.S, KeyCode.LeftArrow };
+    static readonly KeyCode[] rightSlopeKeys = { KeyCode.L, KeyCode.Semicolon, KeyCode.RightArrow };
+    static readonly Color QuestionBackground = new Color(0.05f, 0.06f, 0.12f);//後ろのリザルトが透けないよう不透明にする
+    static readonly Color EndColor = new Color(0.3f, 0.8f, 1f);//左斜面（終了）。オープニングの質問と同じ色
+    static readonly Color ContinueColor = new Color(1f, 0.4f, 0.75f);//右斜面（コンティニュー）
 
     private Font font;
     private Sprite gradient;
@@ -48,6 +59,15 @@ public class FinalResultScreen : MonoBehaviour
     private float startTime;
     private bool ready;//演出が終わって入力を受け付けている
     private bool leaving;
+
+    //コンティニューの質問
+    private bool asking;
+    private float askTime;
+    private CanvasGroup question;
+    private RectTransform questionContent;//答えを選んだら消す部分
+    private Text timerText;
+    private Image endGlow, continueGlow;
+    private float endLevel, continueLevel;
 
     void Start()
     {
@@ -76,6 +96,11 @@ public class FinalResultScreen : MonoBehaviour
     void Update()
     {
         if (leaving || root == null) return;
+        if (asking)
+        {
+            UpdateQuestion();
+            return;
+        }
 
         if (continueText != null && ready)
         {
@@ -85,7 +110,7 @@ public class FinalResultScreen : MonoBehaviour
         }
 
         bool timeUp = Time.time - startTime >= autoLeaveSeconds;
-        if ((ready && Time.time - startTime >= inputLockSeconds && AnyPressed()) || timeUp) Leave();
+        if ((ready && Time.time - startTime >= inputLockSeconds && AnyPressed()) || timeUp) Ask();
     }
 
     bool AnyPressed()
@@ -94,11 +119,146 @@ public class FinalResultScreen : MonoBehaviour
         return Input.anyKeyDown;
     }
 
-    void Leave()
+    // ===== コンティニューの質問 =====
+    void Ask()
+    {
+        asking = true;
+        askTime = Time.time;
+        BuildQuestion();
+        StartCoroutine(Animate(0.4f, t =>
+        {
+            float e = EaseOut(t);
+            question.alpha = e;
+            question.transform.localScale = Vector3.one * Mathf.Lerp(1.08f, 1f, e);
+        }));
+    }
+
+    void UpdateQuestion()
+    {
+        float remaining = continueTimeoutSeconds - (Time.time - askTime);
+        int seconds = Mathf.Max(0, Mathf.CeilToInt(remaining));
+        timerText.text = seconds.ToString();
+        timerText.color = seconds <= 3 ? new Color(1f, 0.35f, 0.3f) : Color.white;//残り3秒から赤くする
+
+        endLevel = UpdateGlow(endGlow, EndColor, endLevel, SlopeHeld(0, leftSlopeKeys));
+        continueLevel = UpdateGlow(continueGlow, ContinueColor, continueLevel, SlopeHeld(InputManager.LaneCount - SlopeLaneCount, rightSlopeKeys));
+
+        bool canAnswer = Time.time - askTime >= AnswerLockSeconds;
+        if (canAnswer && SlopePressed(InputManager.LaneCount - SlopeLaneCount, rightSlopeKeys)) Continue();
+        else if ((canAnswer && SlopePressed(0, leftSlopeKeys)) || remaining <= 0f) End();
+    }
+
+    //終了。エンディングでTHANK YOU FOR PLAYING!を出してオープニングへ戻る
+    void End()
     {
         leaving = true;
         System.Array.Clear(PlaySession.TrackResults, 0, PlaySession.TrackResults.Length);//次のプレイヤーに残さない
         SceneFader.FadeTo(GameScene.Ending, Color.black);
+    }
+
+    //コンティニュー。設定（PlaySessionのプレイ設定）はそのまま、1曲目から選曲画面で遊ぶ
+    void Continue()
+    {
+        leaving = true;
+        System.Array.Clear(PlaySession.TrackResults, 0, PlaySession.TrackResults.Length);
+        PlaySession.HasLastSelection = true;//最後に遊んだ曲を選んだ状態から始める
+        StartCoroutine(ContinueRoutine());
+    }
+
+    //答えの表示を消し、「CONTINUE!」を弾ませて画面を光らせてから選曲画面へ
+    IEnumerator ContinueRoutine()
+    {
+        var group = questionContent.GetComponent<CanvasGroup>();
+        Image flash = CreateImage("Flash", question.transform, new Color(ContinueColor.r, ContinueColor.g, ContinueColor.b, 0f));
+        Stretch(flash.rectTransform);
+        Text text = CreateText("ContinueText", question.transform, "CONTINUE!", 160, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(text.rectTransform, Vector2.zero, new Vector2(1600f, 220f));
+
+        yield return Animate(0.35f, t =>
+        {
+            float e = EaseOut(t);
+            group.alpha = 1f - e;
+            text.color = new Color(1f, 1f, 1f, e);
+            text.transform.localScale = Vector3.one * Mathf.Lerp(1.6f, 1f, e);
+            flash.color = new Color(ContinueColor.r, ContinueColor.g, ContinueColor.b, 0.5f * (1f - t));
+        });
+        yield return new WaitForSeconds(0.8f);
+        SceneFader.FadeTo(GameScene.MusicSelect, Color.black);
+    }
+
+    //触れている間は明るく、触れていない間はゆっくり明滅させる。戻り値は新しい明るさ
+    static float UpdateGlow(Image glow, Color color, float level, bool held)
+    {
+        float target = held ? 1f : SensorGlow.IdleLevel;
+        level = Mathf.Lerp(level, target, 1f - Mathf.Exp(-20f * Time.deltaTime));
+        glow.color = new Color(color.r, color.g, color.b, level);
+        return level;
+    }
+
+    bool SlopeHeld(int firstLane, KeyCode[] keys)
+    {
+        if (InputManager.instance != null && InputManager.instance.AnyHeld(firstLane, SlopeLaneCount)) return true;
+        foreach (KeyCode key in keys)
+        {
+            if (Input.GetKey(key)) return true;
+        }
+        return false;
+    }
+
+    bool SlopePressed(int firstLane, KeyCode[] keys)
+    {
+        if (InputManager.instance != null && InputManager.instance.AnyDown(firstLane, SlopeLaneCount)) return true;
+        foreach (KeyCode key in keys)
+        {
+            if (Input.GetKeyDown(key)) return true;
+        }
+        return false;
+    }
+
+    //リザルトの上に暗い背景で重ねる。答えは答える斜面の側に書く（オープニングのチュートリアルの質問と同じ作り）
+    void BuildQuestion()
+    {
+        RectTransform panel = CreateRect("ContinueQuestion", root);
+        Stretch(panel);
+        question = panel.gameObject.AddComponent<CanvasGroup>();
+        question.alpha = 0f;
+        Stretch(CreateImage("Background", panel, QuestionBackground).rectTransform);
+
+        questionContent = CreateRect("Content", panel);
+        Stretch(questionContent);
+        questionContent.gameObject.AddComponent<CanvasGroup>();
+
+        var heading = CreateText("Heading", questionContent, "コンティニューする？", 96, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(heading.rectTransform, new Vector2(0f, 180f), new Vector2(1600f, 130f));
+
+        BuildAnswer(questionContent, "終了", new Vector2(-480f, -160f));
+        BuildAnswer(questionContent, "コンティニュー", new Vector2(480f, -160f));
+
+        //制限時間（右上）。選曲画面・オープニングの質問と同じ位置・大きさ
+        var timer = CreateRect("Timer", questionContent);
+        Place(timer, Vector2.one, Vector2.one, Vector2.one, new Vector2(-60f, -60f), new Vector2(260f, 120f));
+        Stretch(CreateText("Label", timer, "制限時間", 28, TextAnchor.UpperRight).rectTransform);
+        timerText = CreateText("Seconds", timer, "", 80, TextAnchor.LowerRight, FontStyle.Bold);
+        Stretch(timerText.rectTransform);
+
+        endGlow = BuildSlopeGlow(questionContent, true, "終了", EndColor);
+        continueGlow = BuildSlopeGlow(questionContent, false, "コンティニュー", ContinueColor);
+    }
+
+    void BuildAnswer(RectTransform parent, string answer, Vector2 position)
+    {
+        var answerText = CreateText("Answer", parent, answer, 96, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(answerText.rectTransform, position, new Vector2(800f, 120f));
+    }
+
+    Image BuildSlopeGlow(RectTransform parent, bool left, string label, Color color)
+    {
+        RectTransform slope = SensorGlow.SlopeRect(parent, left ? "EndSlope" : "ContinueSlope", left);
+        Image image = SensorGlow.WholeSlope(slope, "Glow", color, gradient);
+        var text = CreateText("Label", slope, label, 38, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+              new Vector2(0f, SensorGlow.SlopeHeight / 2f), new Vector2(SensorGlow.SlopeLength / 2f, SensorGlow.SlopeHeight));
+        return image;
     }
 
     //Resultシーン単体で動かすときの仮の結果。曲はStreamingAssets/Songsの先頭から借り（無ければ仮の曲名）、
@@ -284,6 +444,15 @@ public class FinalResultScreen : MonoBehaviour
         ShrinkToFit(difficulty);
         var level = CreateText("Level", row, $"Lv.{result.level}", 48, TextAnchor.MiddleLeft, FontStyle.Bold);
         Place(level.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(left + 220f, 38f), new Vector2(160f, 60f));
+
+        //プレイスキップした曲は、スコアと判定数の代わりに"Skipped"と出す
+        if (result.skipped)
+        {
+            var skipped = CreateText("Skipped", row, "Skipped", 96, TextAnchor.MiddleRight, FontStyle.Bold);
+            skipped.color = LabelColor;
+            Place(skipped.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(JacketWidth + InfoWidth - 60f, 0f), new Vector2(600f, 130f));
+            return;
+        }
 
         var score = CreateText("Score", row, result.score.ToString(), 96, TextAnchor.MiddleRight, FontStyle.Bold);
         Place(score.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(JacketWidth + InfoWidth - 60f, 38f), new Vector2(440f, 110f));

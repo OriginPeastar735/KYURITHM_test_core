@@ -12,8 +12,8 @@ public static class SensorGlow
     public static readonly float SlopeLength = RefWidth * SensorLayout.SlopeWidthRatio;//斜面センサー1本分の長さ（キャンバス座標）
     public static readonly float SlopeSpan = SlopeLength / Mathf.Sqrt(2f);//斜面が画面下辺・側辺を占める長さ
     public static readonly float BottomWidth = SlopeLength * 2f;//底面センサーの長さ
-    public const float BottomHeight = 70f;//底面の光の太さ
-    public const float SlopeHeight = 50f;//斜面の光の太さ
+    public const float BottomHeight = 91f;//底面の光の太さ
+    public const float SlopeHeight = 65f;//斜面の光の太さ
     const float Gap = 4f;//隣の帯との境目
 
     //触れていないときの明るさ。ゆっくり明滅して操作できる場所を示す

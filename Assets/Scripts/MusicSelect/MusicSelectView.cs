@@ -13,6 +13,7 @@ public class CardInfo
     public string topLarge = "";//上の大きい文字（レベルなど）
     public Color squareColor = Color.gray;//真ん中の正方形（ジャケット）
     public Color squareBorder = Color.clear;//正方形の枠の色（透明なら枠なし）
+    public Color frame = Color.clear;//カードを囲む枠の色（透明なら枠なし）。適用中のプリセットなど、選ばれていることを示す
     public Sprite squareSprite;
     public string squareText = "";
     public int squareTextSize = 40;
@@ -78,6 +79,8 @@ public class MusicSelectView : MonoBehaviour
     const float SideY = 40f;
     const float SideScale = 0.56f;//選択されていないカードの大きさ（選択中のカードに対する倍率）
     const float ScrollSpeed = 20f;//スクロールの追従の速さ
+    const float FrameWidth = 10f;//カードを囲む枠の太さ
+    const float FoldSeconds = 0.3f;//プリセットのカードを開閉するアニメーションの長さ
 
     //操作エリアの光の太さ
     const float BottomGlowHeight = SensorGlow.BottomHeight;
@@ -109,6 +112,10 @@ public class MusicSelectView : MonoBehaviour
     private float scroll;//表示上の位置。targetに向かってなめらかに動く
     private int target;
     private float decideFlash;
+
+    //カードの開閉（プリセット）。foldFromの右のfoldCount枚が、fold=1のときfoldFromのカードの裏に畳まれる
+    private int foldFrom, foldCount;
+    private float fold;
 
     // ===== Managerから呼ぶ =====
     //itemAt: 位置pに表示するカードの内容。nullを返すとその位置にはカードを出さない
@@ -221,6 +228,37 @@ public class MusicSelectView : MonoBehaviour
     public void PlayDecide()
     {
         decideFlash = 1f;
+    }
+
+    //fromの位置のカードの右に、count枚のカードを開く・閉じるアニメーション
+    //開くときは先にchange()でカードを増やしてから広げる。閉じるときは畳み終えてからchange()でカードを減らす（右のカードはその分左へ詰める）
+    public void Fold(int from, int count, bool open, Action change)
+    {
+        StartCoroutine(FoldRoutine(from, count, open, change));
+    }
+
+    IEnumerator FoldRoutine(int from, int count, bool open, Action change)
+    {
+        IsTransitioning = true;
+        foldFrom = from;
+        foldCount = count;
+        if (open) change();
+        yield return Animate(FoldSeconds, t =>
+        {
+            float e = EaseOut(t);
+            fold = open ? 1f - e : e;
+        });
+        if (!open) change();
+        fold = 0f;
+        IsTransitioning = false;
+    }
+
+    //開閉の途中の、位置pのカードを置く位置（小数）
+    float FoldedPosition(int p)
+    {
+        if (fold <= 0f || p <= foldFrom) return p;
+        if (p <= foldFrom + foldCount) return Mathf.Lerp(p, foldFrom, fold);
+        return p - foldCount * fold;
     }
 
     //画面の切り替えアニメーション。今のカードを横に流して消し、change()で中身を切り替えてから反対側から出す
@@ -346,13 +384,18 @@ public class MusicSelectView : MonoBehaviour
                 card.Set(itemAt(p));
             }
 
-            float offset = p - scroll;//中央から何枚ぶんずれているか（小数あり）
+            float offset = FoldedPosition(p) - scroll;//中央から何枚ぶんずれているか（小数あり）
             float dist = Mathf.Abs(offset);
             float focus = Mathf.Clamp01(1f - dist);//中央で1、隣の位置で0
             card.rect.anchoredPosition = new Vector2(Mathf.Sign(offset) * CardX(dist), Mathf.Lerp(SideY, SelectedY, focus));
             card.rect.localScale = Vector3.one * Mathf.Lerp(SideScale, 1f, focus);
             card.SetFocus(focus);
-            card.distance = dist;
+            //畳まれていくカードは薄くし、畳んだ先のカードより奥に描く
+            bool folding = fold > 0f && p > foldFrom && p <= foldFrom + foldCount;
+            card.group.alpha = folding ? 1f - fold : 1f;
+            card.distance = folding ? dist + 1f : dist;
+            //決定（プリセットの適用）の瞬間は、枠を少し太くして光らせる
+            card.SetFrameBoost(focus * decideFlash);
         }
 
         //中央に近いカードほど手前に描く（後ろの兄弟ほど手前）
@@ -487,7 +530,7 @@ public class MusicSelectView : MonoBehaviour
         var image = CreateImage(zone.ToString(), parent, color, gradient);
         Place(image.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(x + gap, 0f), new Vector2(width - gap * 2f, BottomGlowHeight));
 
-        var text = CreateText(zone + "Label", parent, "", 32, TextAnchor.MiddleCenter, FontStyle.Bold);
+        var text = CreateText(zone + "Label", parent, "", 40, TextAnchor.MiddleCenter, FontStyle.Bold);
         Place(text.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(x, 0f), new Vector2(width, BottomGlowHeight));
         glows[(int)zone] = new ZoneGlow { image = image, color = color, label = text };
     }
@@ -512,12 +555,12 @@ public class MusicSelectView : MonoBehaviour
             var image = CreateImage(zones[i].ToString(), slope, color, gradient);
             Place(image.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-half + i * half + gap, 0f), new Vector2(half - gap * 2f, SlopeGlowHeight));
             //記号はそれぞれのエリアの中央に、斜面に沿って傾けて置く
-            var sign = CreateText(zones[i] + "Sign", slope, "", 36, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Place(sign.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-half / 2f + i * half, SlopeGlowHeight / 2f), new Vector2(60f, 60f));
+            var sign = CreateText(zones[i] + "Sign", slope, "", 46, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Place(sign.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-half / 2f + i * half, SlopeGlowHeight / 2f), new Vector2(72f, 72f));
             glows[(int)zones[i]] = new ZoneGlow { image = image, color = color, label = sign };
         }
 
-        var title = CreateText("Title", slope, "", 24, TextAnchor.MiddleCenter, FontStyle.Bold);
+        var title = CreateText("Title", slope, "", 30, TextAnchor.MiddleCenter, FontStyle.Bold);
         Place(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, SlopeGlowHeight / 2f), new Vector2(half, SlopeGlowHeight));
         return new SlopeVisual { whole = whole, title = title, lower = lowerLaneZone, upper = upperLaneZone };
     }
@@ -528,7 +571,7 @@ public class MusicSelectView : MonoBehaviour
         popup = CreateRect("SortPopup", root);
         popupGroup = popup.gameObject.AddComponent<CanvasGroup>();
         popupGroup.alpha = 0f;
-        Stretch(CreateImage("Background", popup, new Color(0.03f, 0.05f, 0.12f, 0.95f)).rectTransform);
+        Stretch(CreateImage("Background", popup, new Color(0.03f, 0.05f, 0.12f)).rectTransform);//後ろのカードが透けないよう不透明にする
         var line = CreateImage("Line", popup, new Color(0.3f, 0.8f, 1f)).rectTransform;
         Place(line, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 4f));
 
@@ -608,10 +651,11 @@ public class MusicSelectView : MonoBehaviour
     class SongCard
     {
         public RectTransform rect;
+        public CanvasGroup group;
         public int assignedPosition = int.MinValue;//今表示している位置
         public float distance;//中央から何枚ぶん離れているか（描画順に使う）
 
-        private readonly Image background, squareBorder, square;
+        private readonly Image frame, background, squareBorder, square;
         private readonly Text topSmall, topLarge, squareText, title, subtitle, rank, highScore;
         private readonly CanvasGroup detail;//選択中のカードだけに出す情報（ランク・ハイスコア）
 
@@ -619,7 +663,11 @@ public class MusicSelectView : MonoBehaviour
         {
             rect = CreateRect("Card", parent);
             Place(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(CardWidth, CardHeight));
+            group = rect.gameObject.AddComponent<CanvasGroup>();
 
+            //枠はカードより一回り大きい板を背景の裏に置いて作る
+            frame = CreateImage("Frame", rect, Color.clear);
+            Stretch(frame.rectTransform, -FrameWidth, -FrameWidth, -FrameWidth, -FrameWidth);
             background = CreateImage("Background", rect, Color.gray);
             Stretch(background.rectTransform);
 
@@ -662,6 +710,7 @@ public class MusicSelectView : MonoBehaviour
             if (info == null) return;
 
             background.color = info.background;
+            frame.color = info.frame;
             topSmall.text = info.topSmall;
             topLarge.text = info.topLarge;
             square.sprite = info.squareSprite;
@@ -691,6 +740,13 @@ public class MusicSelectView : MonoBehaviour
         public void SetFocus(float focus)
         {
             detail.alpha = focus;
+        }
+
+        //boost: 0〜1。枠を太くする量
+        public void SetFrameBoost(float boost)
+        {
+            float width = FrameWidth * (1f + boost * 1.5f);
+            Stretch(frame.rectTransform, -width, -width, -width, -width);
         }
 
         static void PlaceTop(RectTransform rt, float top, Vector2 size)

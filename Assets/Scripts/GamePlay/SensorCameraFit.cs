@@ -16,7 +16,7 @@ public class SensorCameraFit : MonoBehaviour
 {
     [Range(0.5f, 1f)] public float vanishingPointHeight = 0.95f;//レーンの消失点の高さ（画面の下端0〜上端1）
     public float distance = 4f;//判定ラインがセンサーに重なるとき(judgeLineOffset=0)の、カメラから判定ラインまでの距離。小さいほど遠近感が強い
-    [Range(0f, 0.3f)] public float judgeLineOffset = 0.1f;//判定ラインの底面の高さ（画面の高さに対する割合）。0で画面の下端（センサーに重なる）
+    [Range(0f, 0.3f)] public float judgeLineOffset = 0.15f;//判定ラインの底面の高さ（画面の高さに対する割合）。0で画面の下端（センサーに重なる）
 
     private Camera cam;
     private int lastWidth, lastHeight;

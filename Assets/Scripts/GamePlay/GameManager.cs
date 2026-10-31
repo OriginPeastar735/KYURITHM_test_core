@@ -26,6 +26,9 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private Renderer background;//プレイ中の背景（未設定ならメインカメラの子から探す）
 
+    [Tooltip("運営用。プレイ中に押すと、演出もリザルトも出さずにすぐ選曲画面へ移る（最終リザルトにはSkippedと出す）")]
+    [SerializeField] private KeyCode skipKey = KeyCode.F12;
+
     [Header("FAST/LATE表示（選曲画面の設定がONのときだけ、コンボ表示を複製して作る）")]
     [SerializeField] private Vector2 fastLateOffset = new Vector2(0f, -0.4f);//コンボ表示からの位置
     [SerializeField] private float fastLateFontSize = 0.25f;
@@ -61,9 +64,10 @@ public class GameManager : MonoBehaviour
         NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
 
-        //プレイが始まってすぐノーツが来ないように、最初のノーツが壁から見え始めるまで1小節あける
+        //曲を再生する前に、必ずLeadInBars小節ぶん待つ（小節線がONなら、その間は小節線だけが流れてくる）
+        //待ち始めに1本目の小節線が壁から見え始めるよう、ノーツが流れてくる秒数も足す
         NoteManager notes = NoteManager.instance;
-        MusicManager.instance.SetStartDelay(notes.TravelSeconds + notes.BarSeconds - notes.FirstNoteTime);
+        MusicManager.instance.SetStartDelay(notes.TravelSeconds + notes.LeadInSeconds);
     }
 
     //選曲画面で設定した明るさ(%)を背景の色に掛けて暗くする（マテリアルはこのシーンだけの複製を変える）
@@ -87,6 +91,12 @@ public class GameManager : MonoBehaviour
 
         //すべてのノーツの判定が終わったら（ノーツのリストが全部空になったら）、曲の途中でもリザルトを出す
         //ノーツが0個の譜面はリストが最初から空なので、曲の終わりで出す
+        if (!isFinished && Input.GetKeyDown(skipKey))
+        {
+            SkipPlay();
+            return;
+        }
+
         //チュートリアルはリザルトを出さない（終わりはTutorialが決める）
         if (PlaySession.IsTutorial) return;
         bool finished = totalCombo > 0 ? NoteManager.instance.AllNotesCleared : MusicManager.instance.IsSongFinished;
@@ -99,6 +109,34 @@ public class GameManager : MonoBehaviour
             RecordTrack();
             if (resultScreen != null) resultScreen.Show(PlayResult, hasPlayed ? previousBest : (int?)null, hideOnResult);
         }
+    }
+
+    //運営のプレイスキップ。センサーの不具合などで続けられないときに使う
+    //ハイスコアは記録せず、最終リザルトには"Skipped"と出す。規定の曲数を遊び終えたことになる場合は最終リザルトへ移る
+    void SkipPlay()
+    {
+        isFinished = true;
+        //楽曲紹介の途中なら、紹介画面（シーンが変わっても残る）も消す
+        IntroScreen intro = FindAnyObjectByType<IntroScreen>();
+        if (intro != null) Destroy(intro.gameObject);
+
+        if (PlaySession.IsTutorial)
+        {
+            Notice.Show("チュートリアルをスキップしました");
+            GetComponent<Tutorial>().Finish(true);
+            return;
+        }
+
+        PlaySession.RecordTrack(new TrackResult
+        {
+            title = string.IsNullOrEmpty(PlaySession.SongTitle) ? NoteManager.instance.title : PlaySession.SongTitle,
+            difficulty = PlaySession.Difficulty,
+            level = PlaySession.SongLevel,
+            jacketPath = PlaySession.JacketPath,
+            skipped = true,
+        });
+        Notice.Show($"プレイをスキップしました（{PlaySession.TrackNumber}曲目）");
+        SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Result);
     }
 
     //最終リザルトに出す1曲分の結果を残す

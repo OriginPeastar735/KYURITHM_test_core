@@ -13,7 +13,8 @@ using UnityEngine;
 //
 //  設定は display_fit.json（Application.persistentDataPath の中）に保存する
 //  起動時にファイルがあれば読み込んで使い、無ければ DisplayFitSetup で合わせてもらってから保存する
-//  合わせ直すときは、このファイルを消してから起動し直す
+//  同じファイルに筐体のタイミングの調整（音と映像の遅れ）も保存する。画面合わせを確定すると TimingCalibration に進む
+//  合わせ直すときは、オープニングでF9を押す（今の設定から始めるので、少し直すだけでよい）
 //
 //  ウィンドウを動かすのはWindowsのビルドだけ（エディタで再生したときは、エディタのウィンドウを動かさないよう何もしない）
 public class DisplayFit : MonoBehaviour
@@ -24,6 +25,11 @@ public class DisplayFit : MonoBehaviour
         public float scale = 1f;//テレビの画面に対するウィンドウの大きさ（1で全画面）
         public float left;//ウィンドウの左端の位置（画面の幅に対する割合）
         public float bottom;//ウィンドウの下端の位置（画面の高さに対する割合）
+
+        //筐体のタイミングの調整(ms)。選曲画面の設定に足して使う（PlaySession.SongOffsetMs・JudgeOffsetMsを参照）
+        public int songOffsetMs;
+        public int judgeOffsetMs;
+        public bool timingCalibrated;//タイミング合わせを済ませたか
 
         public Settings Clone()
         {
@@ -37,7 +43,7 @@ public class DisplayFit : MonoBehaviour
     public static string FilePath => Path.Combine(Application.persistentDataPath, "display_fit.json");
 
     public static Settings Current { get; private set; } = new Settings();//今使っている設定。設定画面では動かすたびに変わる
-    public static bool IsSetupOpen { get; private set; }//初回の画面合わせ中。オープニングはこの間の入力を受け付けない
+    public static bool IsSetupOpen { get; private set; }//初回の画面合わせ・タイミング合わせ中。オープニングはこの間の入力を受け付けない
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
     private IntPtr window;
@@ -55,10 +61,33 @@ public class DisplayFit : MonoBehaviour
 
         Settings saved = Load();
         Current = saved ?? new Settings();
-        IsSetupOpen = saved == null;
-        if (IsSetupOpen) host.AddComponent<DisplayFitSetup>();
+        if (saved == null) OpenSetup();
     }
 #endif
+
+    //画面合わせ → タイミング合わせの順に設定画面を出す（初回起動時、またはオープニングでF9を押したとき）
+    public static void OpenSetup()
+    {
+        IsSetupOpen = true;
+        var host = new GameObject("DisplayFitSetup");
+        DontDestroyOnLoad(host);
+        host.AddComponent<DisplayFitSetup>();
+    }
+
+    //タイミング合わせの画面を出す（画面合わせを確定した後）
+    public static void OpenTimingCalibration()
+    {
+        IsSetupOpen = true;
+        var host = new GameObject("TimingCalibration");
+        DontDestroyOnLoad(host);
+        host.AddComponent<TimingCalibration>();
+    }
+
+    //画面合わせ・タイミング合わせがすべて終わったときに呼ぶ
+    public static void EndSetup()
+    {
+        IsSetupOpen = false;
+    }
 
     //設定画面で動かした値をすぐウィンドウに反映する
     public static void Preview(Settings settings)
@@ -70,16 +99,20 @@ public class DisplayFit : MonoBehaviour
     public static void Confirm(Settings settings)
     {
         Preview(settings);
-        IsSetupOpen = false;
+#if UNITY_EDITOR
+        //エディタとビルドは保存先が同じなので、エディタで試したときにビルドの画面合わせを上書きしないよう保存しない
+        Debug.Log("エディタでは筐体の設定を保存しません（今回の再生中だけ使います）");
+#else
         try
         {
             File.WriteAllText(FilePath, JsonConvert.SerializeObject(Current, Formatting.Indented));
-            Debug.Log($"画面の大きさの設定を保存しました: {FilePath}");
+            Debug.Log($"筐体の設定を保存しました: {FilePath}");
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"画面の大きさの設定を保存できませんでした: {FilePath}\n{e.Message}");
+            Debug.LogWarning($"筐体の設定を保存できませんでした: {FilePath}\n{e.Message}");
         }
+#endif
     }
 
     //小さくしても画面の外にはみ出さないようにする

@@ -36,10 +36,12 @@ public class InputManager : MonoBehaviour
     private bool[] keyHeld = new bool[LaneCount];//キーボードで押されている
     private bool[] prevKeyHeld = new bool[LaneCount];
     private uint controllerMask;//メインスレッドで反映済みのコントローラーの押下状態(bit i = lane i)
+    private uint ignoredMask;//誤作動として無視しているレーン。一度離れたと報告されたら無視をやめる
 
     [Header("入力元の切り替え")]
     [SerializeField] private InputSource source = InputSource.Both;
     [SerializeField] private KeyCode switchKey = KeyCode.F1;//プレイ中に押すと Keyboard → Controller → Both の順に切り替わる
+    [SerializeField] private KeyCode resetKey = KeyCode.F5;//押すと、今タッチ中になっているセンサーを誤作動として扱いリセットする（どのシーンでも効く）
 
     //テストプレイ用キー配置（左から順に4レーンずつ担当）
     [SerializeField]
@@ -90,6 +92,7 @@ public class InputManager : MonoBehaviour
         {
             SetSource((InputSource)(((int)source + 1) % 3));
         }
+        if (Input.GetKeyDown(resetKey)) ResetStuckSensors();
 
         //前のフレームの押下状態を残してから、このフレームの状態を読み直す
         Array.Copy(laneHeld, prevHeld, LaneCount);
@@ -122,7 +125,8 @@ public class InputManager : MonoBehaviour
     {
         while (sensorEvents.TryDequeue(out SensorEvent e))
         {
-            uint pressed = e.mask & ~controllerMask;
+            ignoredMask &= e.mask;//離れたと報告されたレーンは、次に触れたら普通に反応させる
+            uint pressed = e.mask & ~controllerMask & ~ignoredMask;
             for (int lane = 0; lane < LaneCount; lane++)
             {
                 if ((pressed & (1u << lane)) != 0) MarkDown(lane, e.timestamp);
@@ -130,9 +134,44 @@ public class InputManager : MonoBehaviour
             controllerMask = e.mask;
         }
 
+        uint held = controllerMask & ~ignoredMask;
         for (int lane = 0; lane < LaneCount; lane++)
         {
-            if ((controllerMask & (1u << lane)) != 0) laneHeld[lane] = true;
+            if ((held & (1u << lane)) != 0) laneHeld[lane] = true;
+        }
+    }
+
+    //センサーの誤作動（触れていないのにタッチ中になり続ける）を直す
+    //  1. タッチ中のレーンを、離れたと報告されるまで無視する（コントローラー側で直らなくても、ゲームはすぐ遊べる）
+    //  2. タッチ中のレーンがあるMPR121（8レーンずつ）の番号 '0'〜'3' をコントローラーに送り、基準値を取り直してもらう
+    //     （古いコントローラーのプログラムは知らない文字を読み飛ばすので、送っても問題ない）
+    public void ResetStuckSensors()
+    {
+        if (controllerMask == 0)
+        {
+            Notice.Show("センサーリセット: タッチ中のレーンはありません");
+            return;
+        }
+        ignoredMask |= controllerMask;
+
+        var units = new List<byte>();
+        for (int unit = 0; unit < LaneCount / 8; unit++)
+        {
+            if (((controllerMask >> (unit * 8)) & 0xFF) != 0) units.Add((byte)('0' + unit));
+        }
+        var lanes = new List<int>();
+        for (int lane = 0; lane < LaneCount; lane++)
+        {
+            if ((controllerMask & (1u << lane)) != 0) lanes.Add(lane);
+        }
+        Notice.Show($"センサーをリセットしました（レーン {string.Join(", ", lanes)}）");
+        try
+        {
+            if (port != null && port.IsOpen) port.Write(units.ToArray(), 0, units.Count);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("コントローラーにリセットを送れませんでした: " + e.Message);
         }
     }
 
@@ -231,6 +270,7 @@ public class InputManager : MonoBehaviour
         port = null;
         while (sensorEvents.TryDequeue(out _)) { }
         controllerMask = 0;
+        ignoredMask = 0;
     }
 
     //押下状態が変わったときだけ、受信した時刻と一緒に記録する

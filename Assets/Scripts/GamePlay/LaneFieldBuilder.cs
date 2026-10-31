@@ -34,7 +34,10 @@ public class LaneFieldBuilder : MonoBehaviour
     private readonly List<GameObject> slopeObjects = new List<GameObject>();//斜面のキービーム・区切り線・判定ライン・壁の線
     private readonly List<Renderer> slopeRails = new List<Renderer>();//斜面の床
     private Material slopeRailMaterial;//斜面の床の普段のマテリアル
-    private Material hiddenRailMaterial;//隠している間の斜面の床（黒）
+    private Material hiddenRailMaterial;//隠している間の斜面の床（光を反射しないもの）
+
+    [Header("チュートリアルで斜面を使わない間の見え方")]
+    [Range(0f, 1f)] public float hiddenSlopeLineAlpha = 0.3f;//斜面の区切り線・判定ライン・壁の線の濃さ（元の濃さに掛ける。0で見えない）
 
     void Awake()
     {
@@ -67,20 +70,49 @@ public class LaneFieldBuilder : MonoBehaviour
         if (hiddenRailMaterial != null) Destroy(hiddenRailMaterial);
     }
 
-    //true: 斜面の床を黒くし、斜面のキービーム・区切り線・判定ライン・壁の線を消す（チュートリアルで底面だけを使う間）
+    //true: 斜面を暗くする（チュートリアルで底面だけを使う間）。真っ黒にすると斜面が無いように見えるので、かすかに見える暗さにする
+    //  床は光を反射しないようにし、区切り線・判定ライン・壁の線は hiddenSlopeLineAlpha の濃さにする。キービームは消す
     //底面と斜面の境目の線は底面の端として残す
     public void SetSlopesHidden(bool hidden)
     {
-        foreach (GameObject obj in slopeObjects) obj.SetActive(!hidden);
+        foreach (GameObject obj in slopeObjects)
+        {
+            if (obj.GetComponentInChildren<KeyBeamFade>(true) != null || !DimLines(obj, hidden)) obj.SetActive(!hidden);
+        }
 
         if (slopeRailMaterial == null) return;
         if (hiddenRailMaterial == null)
         {
             hiddenRailMaterial = new Material(slopeRailMaterial) { name = "HiddenSlopeRail" };
-            hiddenRailMaterial.SetColor("_BaseColor", Color.black);
             hiddenRailMaterial.SetFloat("_Smoothness", 0f);//光の反射で白っぽく見えないようにする
         }
         foreach (Renderer rail in slopeRails) rail.sharedMaterial = hidden ? hiddenRailMaterial : slopeRailMaterial;
+    }
+
+    //線のアルファを下げる（マテリアルは底面と共有しているので、斜面の線だけMaterialPropertyBlockで上書きする）
+    //_BaseColorの無いマテリアルなら何もせずfalse（その場合は消す）
+    bool DimLines(GameObject obj, bool dim)
+    {
+        Renderer[] renderers = obj.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0) return false;
+        foreach (Renderer rend in renderers)
+        {
+            if (rend.sharedMaterial == null || !rend.sharedMaterial.HasProperty("_BaseColor")) return false;
+        }
+        foreach (Renderer rend in renderers)
+        {
+            if (!dim)
+            {
+                rend.SetPropertyBlock(null);
+                continue;
+            }
+            Color color = rend.sharedMaterial.GetColor("_BaseColor");
+            color.a *= hiddenSlopeLineAlpha;
+            var block = new MaterialPropertyBlock();
+            block.SetColor("_BaseColor", color);
+            rend.SetPropertyBlock(block);
+        }
+        return true;
     }
 
     static bool IsSlopeLane(int lane)
