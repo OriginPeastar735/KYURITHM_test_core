@@ -49,14 +49,14 @@ public class OpeningScreen : MonoBehaviour
     static readonly Credit[] Credits =
     {
         new Credit("電子情報工学科", "3年", "宮﨑 九十九"),
-        new Credit("電子情報工学科", "4年", "濵田 大稀"),
         new Credit("電気工学科", "1年", "細川 大耀"),
-        new Credit("電子情報工学科", "3年", "寺田 睦生"),
         new Credit("機械工学科", "3年", "撰 亮伸"),
         new Credit("電子情報工学科", "3年", "野村 ひとね"),
+        new Credit("電子情報工学科", "3年", "井上 釉互"),
+        new Credit("電子情報工学科", "4年", "濵田 大稀"),
+        new Credit("電子情報工学科", "3年", "寺田 睦生"),
         new Credit("電子情報工学科", "1年", "嵐 奏人"),
         new Credit("電子情報工学科", "1年", "松原 快知"),
-        new Credit("電子情報工学科", "3年", "井上 釉互"),
         new Credit("電子情報工学科", "3年", "北 聖也"),
     };
 
@@ -125,6 +125,12 @@ public class OpeningScreen : MonoBehaviour
         c.a = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
         startText.color = c;
 
+        //初回起動の画面合わせ中は受け付けない。確定したタッチで質問が出ないよう、終わってから受け付けるまでの待ち時間を数え直す
+        if (DisplayFit.IsSetupOpen)
+        {
+            startTime = Time.time;
+            return;
+        }
         if (Time.time - startTime >= inputLockSeconds && AnyPressed()) Ask();
     }
 

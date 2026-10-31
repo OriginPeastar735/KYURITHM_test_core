@@ -28,10 +28,10 @@ public class Hold : MonoBehaviour
         this.centerLane = lane + width / 2f;
 
         //x,yと傾きはLaneSurfaceShapeが子の板で作る（傾斜の折れ目をまたぐ場合は折れ目で分割される）
-        //高さは判定ラインより上（LaneLayout.NoteHeight）
+        //高さはslideより上（LaneLayout.TopNoteHeight）
         LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
         NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、縁と中心の線を付ける
-        shape.SetRange(lane, width, LaneLayout.NoteHeight);
+        shape.SetRange(lane, width, LaneLayout.TopNoteHeight);
         frontOffset = shape.Depth / 2f;
 
         //自身はz方向に動かすだけなので原点に置く
