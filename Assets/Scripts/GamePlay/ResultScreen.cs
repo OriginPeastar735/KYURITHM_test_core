@@ -130,8 +130,7 @@ public class ResultScreen : MonoBehaviour
 
     bool BackPressed()
     {
-        if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
-        return Input.anyKeyDown;
+        return InputManager.AnyPressed();
     }
 
     //曲名とアーティスト名は選曲画面で選んだ曲のものを使う

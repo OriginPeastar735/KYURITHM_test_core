@@ -140,8 +140,7 @@ public class OpeningScreen : MonoBehaviour
 
     bool AnyPressed()
     {
-        if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
-        return Input.anyKeyDown;
+        return InputManager.AnyPressed();
     }
 
     bool LeftSlopePressed()

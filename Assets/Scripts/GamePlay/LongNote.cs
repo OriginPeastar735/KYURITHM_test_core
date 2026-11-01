@@ -320,4 +320,10 @@ public class LongNote : MonoBehaviour
         NoteManager.instance.RemoveLongNote(this);
         Destroy(gameObject);
     }
+
+    //コードで作ったメッシュはオブジェクトを消しても残るので、一緒に消す
+    void OnDestroy()
+    {
+        if (bodyMesh != null) Destroy(bodyMesh);
+    }
 }

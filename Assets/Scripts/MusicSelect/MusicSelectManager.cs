@@ -139,6 +139,7 @@ public class MusicSelectManager : MonoBehaviour
 
         remainingTime = timeLimit;
         inputLockUntil = Time.time + startInputLock;
+        StopRepeat();
     }
 
     void Update()
@@ -365,7 +366,15 @@ public class MusicSelectManager : MonoBehaviour
             position = nextPosition;
             view.Snap(position);
             RefreshInfo();
+            StopRepeat();
         });
+    }
+
+    //長押しの連続操作を止める。押し直すまで繰り返さない（前の画面から押しっぱなしのエリアで勝手に動かないように）
+    void StopRepeat()
+    {
+        nextRepeatTime = float.MaxValue;
+        nextSettingRepeatTime = float.MaxValue;
     }
 
     //前の曲を選んだときのソート・難易度にし、遊んだ曲（ランダム選曲なら抽選された曲）を選んだ状態にする
@@ -396,7 +405,11 @@ public class MusicSelectManager : MonoBehaviour
         {
             foreach (var diff in song.difficulties)
             {
-                if (diff != null && HighScoreStore.Has(diff.chartName)) diff.highScore = HighScoreStore.Get(diff.chartName);
+                if (diff != null && HighScoreStore.Has(diff.chartName))
+                {
+                    diff.highScore = HighScoreStore.Get(diff.chartName);
+                    diff.played = true;
+                }
             }
         }
     }

@@ -36,7 +36,9 @@ public class InputManager : MonoBehaviour
     private bool[] keyHeld = new bool[LaneCount];//キーボードで押されている
     private bool[] prevKeyHeld = new bool[LaneCount];
     private uint controllerMask;//メインスレッドで反映済みのコントローラーの押下状態(bit i = lane i)
-    private uint ignoredMask;//誤作動として無視しているレーン。一度離れたと報告されたら無視をやめる
+    //誤作動として無視しているレーン。一度離れたと報告されたら無視をやめる
+    //InputManagerはシーンごとに作り直されるので、staticにしてシーンが変わっても無視を続ける
+    private static uint ignoredMask;
 
     [Header("入力元の切り替え")]
     [SerializeField] private InputSource source = InputSource.Both;
@@ -219,6 +221,19 @@ public class InputManager : MonoBehaviour
         return AnyInRange(laneHeld, lane, width);
     }
 
+    //「何か押したら進む」画面用。センサーのどこか、またはキーボードの何かが押されたか
+    //運営用のキー（F1の入力切替・F5のセンサーリセット・F9の画面合わせ・F12のスキップなど）では進まないよう、ファンクションキーは除く
+    public static bool AnyPressed()
+    {
+        if (instance != null && instance.AnyDown(0, LaneCount)) return true;
+        if (!Input.anyKeyDown) return false;
+        for (KeyCode key = KeyCode.F1; key <= KeyCode.F15; key++)
+        {
+            if (Input.GetKeyDown(key)) return false;
+        }
+        return true;
+    }
+
     private bool AnyInRange(bool[] states, int lane, int width)
     {
         int start = Mathf.Max(0, lane);
@@ -270,7 +285,7 @@ public class InputManager : MonoBehaviour
         port = null;
         while (sensorEvents.TryDequeue(out _)) { }
         controllerMask = 0;
-        ignoredMask = 0;
+        //ignoredMaskは消さない（シーンの切り替えでも呼ばれるので、消すと次のシーンでまた押しっぱなしになる）
     }
 
     //押下状態が変わったときだけ、受信した時刻と一緒に記録する

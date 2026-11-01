@@ -27,7 +27,8 @@ public class DifficultyData
     public int level;
     public string chartName;//譜面。StreamingAssetsからの相対パス（.json）か、Resources内の名前（仮の曲用）
     public string designer;//譜面制作者
-    public int highScore;//ハイスコア。0なら未プレイ（選曲画面を開いたときにHighScoreStoreの記録で上書きする）
+    public int highScore;//ハイスコア（選曲画面を開いたときにHighScoreStoreの記録で上書きする）
+    public bool played;//遊んだことがあるか。falseなら「未プレイ」と出す（スコア0で遊んだ場合と区別する）
 }
 
 //難易度の名前と色。難易度名を変えるときはここだけ直せばよい

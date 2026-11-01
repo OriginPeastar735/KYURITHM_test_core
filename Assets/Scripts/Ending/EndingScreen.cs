@@ -20,6 +20,14 @@ public class EndingScreen : MonoBehaviour
 
     void Start()
     {
+        //このシーンにはInputManagerが置かれていないので、無ければ作る（センサーに触れても飛ばせるように）
+        //キーボードはAnyPressedで直接読むので、InputManager側はコントローラーのみにする
+        if (InputManager.instance == null)
+        {
+            var input = new GameObject("InputManager").AddComponent<InputManager>();
+            input.SetSource(InputSource.Controller);
+        }
+
         font = CreateFont();
         StartCoroutine(Run(BuildCanvas()));
     }
@@ -41,8 +49,7 @@ public class EndingScreen : MonoBehaviour
 
     bool AnyPressed()
     {
-        if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
-        return Input.anyKeyDown;
+        return InputManager.AnyPressed();
     }
 
     // ===== 画面の組み立て =====

@@ -35,6 +35,7 @@ public class GameManager : MonoBehaviour
     string ComboStr;
     string chartName;//今遊んでいる譜面。ハイスコアの記録に使う
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
+    bool isTutorial;//チュートリアルとして始めたか。Tutorialは終わるとPlaySession.IsTutorialをfalseにするが、フェード中もこのシーンは動くので、始めたときの値で判断する
     int fastCount, lateCount;//PRECISE・APPROXのうち早かった数・遅かった数（最終リザルトに出す）
     void Start()
     {
@@ -42,7 +43,8 @@ public class GameManager : MonoBehaviour
         {
             PlayResult[i] = 0;
         }
-        if (PlaySession.IsTutorial)
+        isTutorial = PlaySession.IsTutorial;
+        if (isTutorial)
         {
             //ノーツは練習ごとにTutorialが流す。スコアの計算に使う総ノーツ数もTutorialが全練習の合計を入れる
             gameObject.AddComponent<Tutorial>();
@@ -98,7 +100,7 @@ public class GameManager : MonoBehaviour
         }
 
         //チュートリアルはリザルトを出さない（終わりはTutorialが決める）
-        if (PlaySession.IsTutorial) return;
+        if (isTutorial) return;
         bool finished = totalCombo > 0 ? NoteManager.instance.AllNotesCleared : MusicManager.instance.IsSongFinished;
         if (!isFinished && finished)
         {
@@ -120,7 +122,7 @@ public class GameManager : MonoBehaviour
         IntroScreen intro = FindAnyObjectByType<IntroScreen>();
         if (intro != null) Destroy(intro.gameObject);
 
-        if (PlaySession.IsTutorial)
+        if (isTutorial)
         {
             Notice.Show("チュートリアルをスキップしました");
             GetComponent<Tutorial>().Finish(true);

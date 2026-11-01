@@ -40,7 +40,7 @@ public class CardInfo
             title = song.title,
             subtitle = song.artist,
             rank = "RANK -",//ランクは未実装なので仮の表示
-            highScore = diff.highScore > 0 ? $"HIGH SCORE\n{diff.highScore:N0}" : "HIGH SCORE\n未プレイ",
+            highScore = diff.played ?$"HIGH SCORE\n{diff.highScore:N0}" : "HIGH SCORE\n未プレイ",
         };
     }
 }

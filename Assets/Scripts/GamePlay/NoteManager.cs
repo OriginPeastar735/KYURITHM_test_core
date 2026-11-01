@@ -458,6 +458,8 @@ public class NoteManager : MonoBehaviour
 
         for (int i = LeadInBars; i >= 1; i--) AddBarLine(DisplayBar(-i * barMillis));
         for (float tick = 0f; tick <= lastTick + 1e-3f; tick += barPertick) AddBarLine(DisplayBar(ExpectedTime(tick)));
+        //offsetが1小節より大きくマイナスだと、曲の前の小節線より譜面の小節線の方が早くなるので並べ直す（UpdateBarLinesは時刻順が前提）
+        barLines.Sort((a, b) => a.bar.CompareTo(b.bar));
     }
 
     //bar: 流す位置（DisplayBarの小節数）
