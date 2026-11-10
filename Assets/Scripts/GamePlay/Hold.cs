@@ -1,4 +1,5 @@
 //Holdノーツ: レーンを押しっぱなしでも判定ライン通過時にPRECISE+として処理される。
+//通過する直前（JudgeManager.holdEarlyGrace秒以内）に触れて離していた場合も取れる。
 //判定ラインを過ぎてから判定幅(MISS)以内に一度も押されなければMISSになる。
 
 using System.Collections;
@@ -28,10 +29,10 @@ public class Hold : MonoBehaviour
         this.centerLane = lane + width / 2f;
 
         //x,yと傾きはLaneSurfaceShapeが子の板で作る（傾斜の折れ目をまたぐ場合は折れ目で分割される）
-        //高さはslideより上（LaneLayout.TopNoteHeight）
+        //タップより細くし、高さもタップより上（LaneLayout.HoldNoteHeight）にして、タップと重なってもどちらも見えるようにする
         LaneSurfaceShape shape = gameObject.AddComponent<LaneSurfaceShape>();
-        NoteManager.instance.ApplyNoteStyle(shape, true);//角を丸め、縁と中心の線を付ける
-        shape.SetRange(lane, width, LaneLayout.TopNoteHeight);
+        NoteManager.instance.ApplyNoteStyle(shape, true, NoteManager.instance.holdDepthRatio);//角を丸め、縁と中心の線を付ける
+        shape.SetRange(lane, width, LaneLayout.HoldNoteHeight);
         frontOffset = shape.Depth / 2f;
 
         //自身はz方向に動かすだけなので原点に置く

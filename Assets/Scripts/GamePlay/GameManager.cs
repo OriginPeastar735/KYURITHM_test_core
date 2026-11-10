@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 //プレイ画面の進行。譜面の読み込みを始め、判定を受けてスコア・コンボを集計し、曲が終わったらリザルトを出す
 public class GameManager : MonoBehaviour
@@ -26,17 +27,21 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private Renderer background;//プレイ中の背景（未設定ならメインカメラの子から探す）
 
-    [Tooltip("運営用。プレイ中に押すと、演出もリザルトも出さずにすぐ選曲画面へ移る（最終リザルトにはSkippedと出す）")]
-    [SerializeField] private KeyCode skipKey = KeyCode.F12;
+    [Header("表示の調整（シーンに置いた文字を、始めるときにコードで動かす）")]
+    [SerializeField] private float scoreFontScale = 1.7f;//スコアの文字の大きさ（シーンの大きさに対する倍率）
+    [SerializeField] private Vector2 comboOffset = new Vector2(0f, 0.5f);//コンボ表示をシーンの位置からずらす量。yを増やすと奥（画面の上）へ動く
+    [SerializeField] private float songInfoTop = 75f;//右上の曲名の、画面の上端からの距離（スコアの下に来るように）
+    private GameObject songInfo;//右上の曲名・難易度（リザルトが出たら隠す）
 
     [Header("FAST/LATE表示（選曲画面の設定がONのときだけ、コンボ表示を複製して作る）")]
     [SerializeField] private Vector2 fastLateOffset = new Vector2(0f, -0.4f);//コンボ表示からの位置
     [SerializeField] private float fastLateFontSize = 0.25f;
     string ComboStr;
-    string chartName;//今遊んでいる譜面。ハイスコアの記録に使う
+    string chartId;//今遊んでいる譜面の目印。ハイスコアの記録に使う
     bool isFinished = false;//リザルトを1回だけ出すためのフラグ
     bool isTutorial;//チュートリアルとして始めたか。Tutorialは終わるとPlaySession.IsTutorialをfalseにするが、フェード中もこのシーンは動くので、始めたときの値で判断する
     int fastCount, lateCount;//PRECISE・APPROXのうち早かった数・遅かった数（最終リザルトに出す）
+    int shownCombo = -1, shownScore = -1;//画面に出しているコンボ・スコア（-1はまだ出していない）
     void Start()
     {
         for (int i = 0; i < 7; i++)
@@ -54,7 +59,15 @@ public class GameManager : MonoBehaviour
             StartChart();
         }
 
+        //スコアを大きく、コンボを少し上へ（FAST/LATE表示はコンボ表示の位置を基準に作るので、その前に動かす）
+        ScoreText.fontSize *= scoreFontScale;
+        ScoreText.textWrappingMode = TextWrappingModes.NoWrap;
+        ScoreText.overflowMode = TextOverflowModes.Overflow;
+        ComboText.rectTransform.anchoredPosition += comboOffset;
+        if (!isTutorial) BuildSongInfo();
+
         if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
+        if (PlaySession.TapSound) TapSound.Create();
         JudgeTextDisplay.Create(ComboText.font);
         ApplyBackgroundBrightness();
     }
@@ -62,7 +75,9 @@ public class GameManager : MonoBehaviour
     void StartChart()
     {
         //MusicSelectを経由せずに起動した場合はChartNameが空なのでデフォルト譜面を読む
-        chartName = string.IsNullOrEmpty(PlaySession.ChartName) ? DefaultChartName : PlaySession.ChartName;
+        bool fromSelect = !string.IsNullOrEmpty(PlaySession.ChartName);
+        string chartName = fromSelect ? PlaySession.ChartName : DefaultChartName;
+        chartId = fromSelect && !string.IsNullOrEmpty(PlaySession.ChartId) ? PlaySession.ChartId : chartName;
         NoteManager.instance.LoadJson(chartName);
         totalCombo = NoteManager.instance.totalCombo;
 
@@ -70,6 +85,40 @@ public class GameManager : MonoBehaviour
         //待ち始めに1本目の小節線が壁から見え始めるよう、ノーツが流れてくる秒数も足す
         NoteManager notes = NoteManager.instance;
         MusicManager.instance.SetStartDelay(notes.TravelSeconds + notes.LeadInSeconds);
+    }
+
+    //遊んでいる曲名と難易度を、画面の右上（スコアの下）に出す
+    //シーンには置かず、ほかの画面と同じくUIUtilで作る（曲名は日本語なのでWindowsのフォントを使う）
+    void BuildSongInfo()
+    {
+        bool fromSelect = !string.IsNullOrEmpty(PlaySession.ChartName);
+        string title = fromSelect && !string.IsNullOrEmpty(PlaySession.SongTitle) ? PlaySession.SongTitle : NoteManager.instance.title;
+        if (string.IsNullOrEmpty(title)) return;
+
+        RectTransform canvas = UIUtil.CreateCanvas("SongInfoCanvas", -1, 0f);//リザルトなどシーンのUIより奥に描く
+        songInfo = canvas.gameObject;
+        Font font = UIUtil.CreateFont();
+        Vector2 topRight = Vector2.one;
+
+        Text titleText = UIUtil.CreateText("Title", canvas, font, Color.white, title, 34, TextAnchor.MiddleRight, FontStyle.Bold);
+        UIUtil.Place(titleText.rectTransform, topRight, topRight, topRight, new Vector2(-30f, -songInfoTop), new Vector2(1000f, 44f));
+        AddShadow(titleText);
+
+        //選曲画面を通らずに起動したときは難易度が分からないので、曲名だけ出す
+        if (!fromSelect) return;
+        int difficulty = Mathf.Clamp(PlaySession.Difficulty, 0, DifficultyInfo.Names.Length - 1);
+        Text difficultyText = UIUtil.CreateText("Difficulty", canvas, font, DifficultyInfo.Colors[difficulty],
+            $"{DifficultyInfo.Names[difficulty]}  Lv.{PlaySession.SongLevel}", 28, TextAnchor.MiddleRight, FontStyle.Bold);
+        UIUtil.Place(difficultyText.rectTransform, topRight, topRight, topRight, new Vector2(-30f, -songInfoTop - 46f), new Vector2(1000f, 38f));
+        AddShadow(difficultyText);
+    }
+
+    //明るい背景の上でも読めるよう、文字に影を付ける
+    static void AddShadow(Text text)
+    {
+        var shadow = text.gameObject.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.7f);
+        shadow.effectDistance = new Vector2(2f, -2f);
     }
 
     //選曲画面で設定した明るさ(%)を背景の色に掛けて暗くする（マテリアルはこのシーンだけの複製を変える）
@@ -87,65 +136,48 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
-        ComboText.text =  PlayResult[1].ToString();
+        //文字は値が変わったときだけ書き換える（毎フレーム文字列を作り直さない）
         PlayResult[0] = CalcScore();
-        ScoreText.text = PlayResult[0].ToString();
-
-        //すべてのノーツの判定が終わったら（ノーツのリストが全部空になったら）、曲の途中でもリザルトを出す
-        //ノーツが0個の譜面はリストが最初から空なので、曲の終わりで出す
-        if (!isFinished && Input.GetKeyDown(skipKey))
+        if (PlayResult[1] != shownCombo)
         {
-            SkipPlay();
-            return;
+            shownCombo = PlayResult[1];
+            ComboText.text = shownCombo.ToString();
         }
+        if (PlayResult[0] != shownScore)
+        {
+            shownScore = PlayResult[0];
+            ScoreText.text = shownScore.ToString();
+        }
+
+        if (songInfo != null && songInfo.activeSelf && ResultScreen.IsShowing) songInfo.SetActive(false);
 
         //チュートリアルはリザルトを出さない（終わりはTutorialが決める）
         if (isTutorial) return;
+        //すべてのノーツの判定が終わったら（ノーツのリストが全部空になったら）、曲の途中でもリザルトを出す
+        //ノーツが0個の譜面はリストが最初から空なので、曲の終わりで出す
         bool finished = totalCombo > 0 ? NoteManager.instance.AllNotesCleared : MusicManager.instance.IsSongFinished;
         if (!isFinished && finished)
         {
             isFinished = true;
-            int previousBest = HighScoreStore.Get(chartName);
-            bool hasPlayed = HighScoreStore.Has(chartName);
-            HighScoreStore.Submit(chartName, PlayResult[0]);
-            RecordTrack();
+            int previousBest = HighScoreStore.Get(chartId);
+            bool hasPlayed = HighScoreStore.Has(chartId);
+            TrackResult result = CreateTrackResult();
+            HighScoreStore.Submit(result);
+            PlaySession.RecordTrack(result);
             if (resultScreen != null) resultScreen.Show(PlayResult, hasPlayed ? previousBest : (int?)null, hideOnResult);
         }
     }
 
-    //運営のプレイスキップ。センサーの不具合などで続けられないときに使う
-    //ハイスコアは記録せず、最終リザルトには"Skipped"と出す。規定の曲数を遊び終えたことになる場合は最終リザルトへ移る
-    void SkipPlay()
+    //1曲分の結果。ハイスコアの記録と、最終リザルト・Webへ送る結果に使う
+    TrackResult CreateTrackResult()
     {
-        isFinished = true;
-        //楽曲紹介の途中なら、紹介画面（シーンが変わっても残る）も消す
-        IntroScreen intro = FindAnyObjectByType<IntroScreen>();
-        if (intro != null) Destroy(intro.gameObject);
-
-        if (isTutorial)
+        return new TrackResult
         {
-            Notice.Show("チュートリアルをスキップしました");
-            GetComponent<Tutorial>().Finish(true);
-            return;
-        }
-
-        PlaySession.RecordTrack(new TrackResult
-        {
-            title = string.IsNullOrEmpty(PlaySession.SongTitle) ? NoteManager.instance.title : PlaySession.SongTitle,
-            difficulty = PlaySession.Difficulty,
-            level = PlaySession.SongLevel,
-            jacketPath = PlaySession.JacketPath,
-            skipped = true,
-        });
-        Notice.Show($"プレイをスキップしました（{PlaySession.TrackNumber}曲目）");
-        SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Result);
-    }
-
-    //最終リザルトに出す1曲分の結果を残す
-    void RecordTrack()
-    {
-        PlaySession.RecordTrack(new TrackResult
-        {
+            chartId = chartId,
+            maxCombo = PlayResult[2],
+            totalNotes = totalCombo,
+            playerName = PlaySession.PlayerName,
+            playedAt = System.DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
             title = string.IsNullOrEmpty(PlaySession.SongTitle) ? NoteManager.instance.title : PlaySession.SongTitle,
             difficulty = PlaySession.Difficulty,
             level = PlaySession.SongLevel,
@@ -157,7 +189,7 @@ public class GameManager : MonoBehaviour
             miss = PlayResult[6],
             fast = fastCount,
             late = lateCount,
-        });
+        };
     }
 
     //全ノーツPRECISE+で baseScore の101%(101万点)になる

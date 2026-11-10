@@ -47,20 +47,51 @@ public class EffectManager : MonoBehaviour
         return effect;
     }
 
+    //判定のエフェクトは判定のたびに複製せず、再生し終えたものを使い回す（プレハブごとに持つ）
+    //プレハブは「再生し終えたら自分を消す」設定なので、複製したものは「再生し終えたら非アクティブにする」に変えておき、
+    //次に使うときにアクティブに戻して最初から再生する
+    private readonly Dictionary<GameObject, List<GameObject>> pools = new Dictionary<GameObject, List<GameObject>>();
+
+    private void SpawnPooled(GameObject prefab, float lane)
+    {
+        if (!pools.TryGetValue(prefab, out List<GameObject> pool))
+        {
+            pool = new List<GameObject>();
+            pools[prefab] = pool;
+        }
+
+        foreach (GameObject used in pool)
+        {
+            if (used == null || used.activeSelf) continue;//まだ再生中
+            used.transform.SetPositionAndRotation(EffectPos(lane), LaneLayout.SurfaceRotation(lane));
+            used.SetActive(true);//Play On Awakeで最初から再生される
+            return;
+        }
+
+        GameObject effect = Spawn(prefab, lane);
+        //一番上にパーティクルが無いプレハブは使い回せないので、今までどおり複製するだけにする（消すのはプレハブ側の設定に任せる）
+        ParticleSystem root = effect.GetComponent<ParticleSystem>();
+        if (root == null) return;
+        ParticleSystem.MainModule main = root.main;
+        main.stopAction = ParticleSystemStopAction.Disable;
+        main.playOnAwake = true;
+        pool.Add(effect);
+    }
+
     // レーン位置(ノーツの中心レーン)を受け取り、エフェクトを出す
     public void PrecisePlusEffect(float lane)
     {
-        Spawn(precisePlusEffectPrefab, lane);
+        SpawnPooled(precisePlusEffectPrefab, lane);
     }
 
     public void PreciseEffect(float lane)
     {
-        Spawn(preciseEffectPrefab, lane);
+        SpawnPooled(preciseEffectPrefab, lane);
     }
 
     public void ApproxEffect(float lane)
     {
-        Spawn(approxEffectPrefab, lane);
+        SpawnPooled(approxEffectPrefab, lane);
     }
 
     //押している間のエフェクト。消すのは呼び出し側（LongNote.Finish）が行う

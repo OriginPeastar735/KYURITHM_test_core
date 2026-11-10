@@ -1,8 +1,30 @@
 // シーン間で受け渡すデータを持つstaticクラス
 public static class PlaySession
 {
-    // プレイヤー情報（ログイン機能は無いので、名前はゲスト固定）
-    public static string PlayerName = "ゲスト";
+    // プレイヤー情報（ログイン機能はまだ無いので、名前はゲスト固定・IDは空）
+    public const string GuestName = "ゲスト";
+    public static string PlayerName = GuestName;
+    public static string PlayerId = "";//Webサイトのアカウント。空ならゲスト（結果をWebへ送らない）
+
+    //今のプレイヤーが遊び終えた曲の結果すべて（コンティニューした分も含む）。プレイを終えるときにまとめてWebへ送る
+    public static readonly System.Collections.Generic.List<TrackResult> SessionResults = new System.Collections.Generic.List<TrackResult>();
+
+    //今のプレイヤーのプレイを終える（終了を選んだ・時間切れ・運営の全スキップ）。次のプレイヤー向けにすべて戻す
+    //「次の人に持ち越さない」ものはここに集める。持ち越すものを増やさないよう、戻す処理をほかの場所に書かない
+    public static void EndSession()
+    {
+        HighScoreStore.QueueForUpload(PlayerId, PlayerName, SessionResults);//ゲストなら何もしない
+        SessionResults.Clear();
+        System.Array.Clear(TrackResults, 0, TrackResults.Length);
+        TrackNumber = 1;
+        HasLastSelection = false;
+        IsTutorial = false;
+        SettingsBeforeTutorial = null;
+        WaitingForIntro = false;
+        ResetSettingsForNextPlayer();
+        PlayerName = GuestName;
+        PlayerId = "";
+    }
     public static int TrackNumber = 1;//何曲目か
     public const int MaxTracks = 3;//1回のプレイで遊べる曲数。この曲数を遊び終えるとResultシーン・エンディングを経てオープニングに戻る
     public static bool IsFinalTrack => TrackNumber >= MaxTracks;
@@ -33,12 +55,14 @@ public static class PlaySession
         if (TrackNumber < 1 || TrackNumber > MaxTracks) return;
         if (TrackNumber == 1) System.Array.Clear(TrackResults, 0, TrackResults.Length);
         TrackResults[TrackNumber - 1] = result;
+        SessionResults.Add(result);
     }
 
     // MusicSelect → Play
     public static int MusicIndex;
     public static int Difficulty;
     public static string ChartName;//空ならPlay側でデフォルト譜面を使う（読み方はSongLibrary.ReadChart）
+    public static string ChartId;//譜面の目印（DifficultyData.chartId）。スコアの記録に使う
     public static string AudioPath;//音源のファイルパス。空ならPlayシーンに設定してある曲を使う
     public static string SongTitle;//選曲画面で選んだ曲の曲名（リザルトに出す）。空なら譜面jsonのmeta.titleを使う
     public static string JacketPath;//選曲画面で選んだ曲のジャケット画像（最終リザルトに出す）
@@ -55,6 +79,15 @@ public static class PlaySession
         PlayPreset.Beginner.Apply();
     }
 
+    //プレイ設定を次のプレイヤー向けに全部戻す（EndSessionから呼ぶ）
+    //プリセットに含まれない設定（判定タイミング・小節線）もここで戻す。前の人の調整が次の人に残らないように
+    public static void ResetSettingsForNextPlayer()
+    {
+        PlayPreset.Beginner.Apply();
+        JudgeOffsetMs = 0;
+        ShowBarLines = true;
+    }
+
     public static float HiSpeed;//ノーツの速さ
     //タイミングの調整(ms)。筐体ごとの調整（DisplayFit.Current）に足して使う
     public static int SongOffsetMs;//楽曲タイミング。+にすると曲に対してノーツの到着と判定が遅れる（音が遅れて聞こえる環境向け）
@@ -68,4 +101,5 @@ public static class PlaySession
     public static int NoteThicknessPercent;//ノーツの太さ（奥行き）。50%がプレハブのままの太さ
     public static bool ShowFastLate;//FAST/LATEを表示するか
     public static bool ShowBarLines = true;//1小節ごとに小節線を流すか（通常はON）
+    public static bool TapSound;//タップ音（ノーツを叩いた音・空打ちの音）を鳴らすか
 }

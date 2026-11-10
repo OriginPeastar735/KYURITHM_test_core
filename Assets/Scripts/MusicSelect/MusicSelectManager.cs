@@ -405,9 +405,9 @@ public class MusicSelectManager : MonoBehaviour
         {
             foreach (var diff in song.difficulties)
             {
-                if (diff != null && HighScoreStore.Has(diff.chartName))
+                if (diff != null && HighScoreStore.Has(diff.chartId))
                 {
-                    diff.highScore = HighScoreStore.Get(diff.chartName);
+                    diff.highScore = HighScoreStore.Get(diff.chartId);
                     diff.played = true;
                 }
             }
@@ -423,6 +423,7 @@ public class MusicSelectManager : MonoBehaviour
         PlaySession.MusicIndex = song.id;
         PlaySession.Difficulty = difficulty;
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
+        PlaySession.ChartId = song.difficulties[difficulty].chartId;
         PlaySession.SortMode = (int)sortMode;
         PlaySession.HasLastSelection = true;
         PlaySession.AudioPath = song.audioPath;
@@ -675,6 +676,16 @@ public class MusicSelectManager : MonoBehaviour
                 minusLabel = "OFF",
                 plusLabel = "ON",
             },
+            new SettingItem
+            {
+                name = "タップ音",
+                description = "叩いたときに音を鳴らす（少し遅れて聞こえることがある）",
+                value = () => PlaySession.TapSound ? "ON" : "OFF",
+                canChange = d => d < 0 ? PlaySession.TapSound : !PlaySession.TapSound,
+                change = d => PlaySession.TapSound = d > 0,
+                minusLabel = "OFF",
+                plusLabel = "ON",
+            },
         };
     }
 
@@ -805,6 +816,7 @@ public class MusicSelectManager : MonoBehaviour
             $"キービーム {preset.keyBeam}%\n" +
             $"ノーツの太さ {preset.noteThickness}%\n" +
             $"FAST/LATE {(preset.showFastLate ? "ON" : "OFF")}\n" +
+            $"タップ音 {(preset.tapSound ? "ON" : "OFF")}\n" +
             $"楽曲タイミング {preset.songOffset:+0;-0;0}ms";
         return new CardInfo
         {

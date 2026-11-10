@@ -24,6 +24,8 @@ public class LongNote : MonoBehaviour
     public float scrollSpeed = 1000f;//1小節あたりに進む距離（NoteManagerがハイスピードから設定する）
     public float startExpectedTime;//始点が判定ラインに来る時刻（曲の再生時間、秒）
     public float endExpectedTime;//終点が判定ラインに来る時刻（曲の再生時間、秒）
+    //これより前に押した入力では始点を判定しない時刻（Note.earliestPressTimeと同じ）
+    [System.NonSerialized] public float earliestPressTime = float.NegativeInfinity;
     private float presentBar;//楽曲の現在の小節位置
     private float endBar;//終点の小節位置
     public float endZ;//終点のz座標
@@ -63,7 +65,8 @@ public class LongNote : MonoBehaviour
 
     private LaneSurfaceShape startShape;//始点・終点ノーツを傾斜に沿わせて描画する
     private LaneSurfaceShape endShape;
-    private float frontOffset;//始点・終点ノーツの中心から手前の面までの距離（手前の面が判定ラインに触れたときが判定のタイミング）
+    private float frontOffset;//始点ノーツの中心から手前の面までの距離（手前の面が判定ラインに触れたときが判定のタイミング）
+    private float endFrontOffset;//終点（中間）ノーツの同じ距離。中間ノーツは細いので始点とは違う
 
     void Awake()
     {
@@ -114,9 +117,14 @@ public class LongNote : MonoBehaviour
 
         //角を丸める。始点と最後の終点には中心に線を入れ、中間ノーツ（最後以外のセクションの終点）は丸めるだけにする
         if (startShape != null) NoteManager.instance.ApplyNoteStyle(startShape, true);
-        if (endShape != null) NoteManager.instance.ApplyNoteStyle(endShape, isLastSection);
+        //中間ノーツは細いただの板にして、始点・終点と見分けやすくする
+        if (endShape != null)
+        {
+            if (isLastSection) NoteManager.instance.ApplyNoteStyle(endShape, true);
+            else NoteManager.instance.ApplyNoteStyle(endShape, false, NoteManager.instance.slideMidDepthRatio, true);
+        }
         if (startShape != null) frontOffset = startShape.Depth / 2f;
-        else if (endShape != null) frontOffset = endShape.Depth / 2f;
+        if (endShape != null) endFrontOffset = endShape.Depth / 2f;
 
         //直線なら1区間、曲線なら分割して帯を描く
         if (bodyMesh != null) SetupBodyMesh(curve == SlideCurve.Linear ? 1 : Mathf.Max(1, curveSegments));
@@ -213,7 +221,7 @@ public class LongNote : MonoBehaviour
             if (EndNote.gameObject.activeSelf != showEnd) EndNote.gameObject.SetActive(showEnd);
             if (showEnd)
             {
-                EndNote.localPosition = new Vector3(0, 0, endZ - frontOffset);
+                EndNote.localPosition = new Vector3(0, 0, endZ - endFrontOffset);
                 endShape.SetRange(endLane, endWidth, LaneLayout.NoteHeight);
             }
         }

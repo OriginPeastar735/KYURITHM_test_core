@@ -35,6 +35,16 @@ constexpr uint8_t ELE_MAP[NUM_UNITS][8] = {
 constexpr uint8_t TOUCH_TH   = 10;   // 変化量がこれを超えたら押下
 constexpr uint8_t RELEASE_TH = 5;    // 変化量がこれを下回ったら解放
 
+// ----- 基準値の固定 (ゆっくり触れても反応させる) -----
+// MPR121 は基準値を自動で追従させる。指がゆっくり入ってくると (隣のキーから横にすべらせたときなど)
+// 「環境が変わった」とみなして基準値のほうが下がり、変化量がしきい値を超えないまま触れていないことになる。
+// true にすると基準値の追従を止め、覚えた基準値からの変化量だけで判定する。
+// 気温などで基準値がずれていく分は、そのユニットに誰も触れていない時間が RECAL_IDLE_MS 続くたびに覚え直して合わせる。
+// false にすると今までどおり (MPR121 の自動追従)。
+constexpr bool     FREEZE_BASELINE = false;
+constexpr uint32_t RECAL_IDLE_MS   = 5000;   // 誰も触れていない時間がこれだけ続いたら基準値を覚え直す
+constexpr uint32_t RECAL_SETTLE_MS = 30;     // 覚え直しにかける時間 (この間だけ自動追従に戻す。送信は止めない)
+
 // ----- 送信周期 -----
 constexpr uint32_t SEND_PERIOD_US = 1000;   // 1ms (1000回/秒)
 
@@ -50,15 +60,58 @@ uint32_t heldSince[NUM_UNITS * 8];
 enum Mode { MODE_BINARY, MODE_DIAG };
 Mode mode = MODE_BINARY;
 
+// 基準値の固定 (FREEZE_BASELINE) の状態
+uint32_t lastTouchMs[NUM_UNITS];   // そのユニットに最後に触れていた時刻
+uint32_t recalStartMs[NUM_UNITS];  // 基準値の覚え直しを始めた時刻
+bool     recalibrating[NUM_UNITS]; // 覚え直しの途中 (自動追従に戻している間)
+
+// そのユニットで使う電極の数 (ELE_MAP の一番大きい番号 + 1)
+uint8_t electrodeCount(uint8_t u) {
+  uint8_t n = 0;
+  for (uint8_t k = 0; k < 8; k++) n = max<uint8_t>(n, ELE_MAP[u][k] + 1);
+  return n;
+}
+
+// ECR (計測の設定) を書き換える。上位2ビットが基準値の扱い
+//   0xC0: 自動追従あり。計測を始めた最初の値を基準値として読み込む
+//   0x80: 自動追従あり。最初の値の上位5ビットだけを読み込む (今までの設定)
+//   0x40: 自動追従なし。基準値は今入っている値のまま
+void setEcr(uint8_t u, uint8_t mode) {
+  cap[u].writeRegister(MPR121_ECR, 0x00);   // いったん停止してから切り替える
+  cap[u].writeRegister(MPR121_ECR, mode | electrodeCount(u));
+}
+
+// 基準値の覚え直しを始める。今の値を基準値として読み込み、RECAL_SETTLE_MS 後に updateBaseline() が追従を止める
+void startRecalibration(uint8_t u, uint32_t now) {
+  setEcr(u, 0xC0);
+  recalibrating[u] = true;
+  recalStartMs[u]  = now;
+  lastTouchMs[u]   = now;
+}
+
+// scan() から毎回呼ぶ。覚え直しを終えて追従を止める / 誰も触れていない時間が続いたら覚え直しを始める
+void updateBaseline(uint8_t u, uint8_t touchedBits, uint32_t now) {
+  if (!FREEZE_BASELINE) return;
+  if (touchedBits) lastTouchMs[u] = now;
+
+  if (recalibrating[u]) {
+    if (now - recalStartMs[u] >= RECAL_SETTLE_MS) {
+      setEcr(u, 0x40);
+      recalibrating[u] = false;
+    }
+    return;
+  }
+  if (now - lastTouchMs[u] >= RECAL_IDLE_MS) startRecalibration(u, now);
+}
+
 bool initUnit(uint8_t u) {
   if (!cap[u].begin(ADDRS[u], &Wire, TOUCH_TH, RELEASE_TH)) return false;
 
-  uint8_t n = 0;
-  for (uint8_t k = 0; k < 8; k++) n = max<uint8_t>(n, ELE_MAP[u][k] + 1);
-
   cap[u].writeRegister(MPR121_ECR, 0x00);        // 停止モード (設定変更のため)
   cap[u].writeRegister(MPR121_DEBOUNCE, 0x00);   // 内部デバウンスなし = 最小遅延
-  cap[u].writeRegister(MPR121_ECR, 0x80 | n);    // 計測開始
+  recalibrating[u] = false;
+  if (FREEZE_BASELINE) startRecalibration(u, millis());                  // 今の値を基準値として覚えてから追従を止める
+  else cap[u].writeRegister(MPR121_ECR, 0x80 | electrodeCount(u));       // 計測開始 (自動追従)
   return true;
 }
 
@@ -85,7 +138,8 @@ void printStatus() {
     Serial.printf("unit%u  0x%02X  lane %2u-%2u  %s\n",
                   u, ADDRS[u], u * 8, u * 8 + 7, present[u] ? "OK" : "NOT FOUND");
   }
-  Serial.printf("touch=%u release=%u stuck=%lums\n", TOUCH_TH, RELEASE_TH, (unsigned long)STUCK_MS);
+  Serial.printf("touch=%u release=%u stuck=%lums freeze_baseline=%s\n", TOUCH_TH, RELEASE_TH, (unsigned long)STUCK_MS,
+                FREEZE_BASELINE ? "on" : "off");
 }
 
 void scan() {
@@ -99,6 +153,7 @@ void scan() {
       if ((t >> ELE_MAP[u][k]) & 1) b |= (1 << k);   // bit0 = 一番小さいレーン番号
     }
     laneBytes[u] = b;
+    updateBaseline(u, b, now);
 
     if (STUCK_MS == 0) continue;
     bool reinit = false;

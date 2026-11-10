@@ -34,6 +34,9 @@ public class Tutorial : MonoBehaviour
         public string body;
         public List<ChartNoteData> notes;
         public bool useSlopes;//斜面にもノーツが来る。falseの練習の間は斜面を黒くして隠す
+        //最初のノーツが判定ラインに来ても押されなかったら、そこで止めて出す案内。nullなら止めない
+        //（タップ・ホールド・スライドそれぞれ最初に出てくる練習にだけ付ける）
+        public string freezeHint;
     }
 
     //ノーツの置き場所（幅はすべてNoteWidth）。レーン番号: 左斜面0〜7・底面8〜23・右斜面24〜31
@@ -61,6 +64,7 @@ public class Tutorial : MonoBehaviour
             {
                 heading = "タップ",
                 body = "ノーツが判定ラインに来たら叩こう",
+                freezeHint = "ここをタッチ！",
                 notes = new List<ChartNoteData>
                 {
                     Tap(Center, 0), Tap(Center, Interval), Tap(LeftSide, Interval * 2), Tap(RightSide, Interval * 3),
@@ -80,6 +84,7 @@ public class Tutorial : MonoBehaviour
             {
                 heading = "ホールド",
                 body = "判定ラインで触れていればOK\n押しっぱなしでも取れる",
+                freezeHint = "ここに触れよう！",
                 //中央に2つ → 中央に10連続 → 2つ同時押しの10連続（連続の後もInterval拍あける）
                 notes = Concat(
                     new List<ChartNoteData> { Hold(Center, 0), Hold(Center, Interval) },
@@ -91,6 +96,7 @@ public class Tutorial : MonoBehaviour
             {
                 heading = "スライド",
                 body = "叩いたら、指を離さず帯をなぞろう\n離すタイミングは自由",
+                freezeHint = "ここをタッチして、そのままなぞろう！",
                 notes = new List<ChartNoteData>
                 {
                     Slide(SlideAt(0), Center, Center),
@@ -157,6 +163,13 @@ public class Tutorial : MonoBehaviour
     private float skipProgress;//0〜1
     private bool finished;
 
+    //最初のノーツで止めて待つときの案内（ShowGuide）
+    private CanvasGroup guideGroup;
+    private readonly RectTransform[] guideShades = new RectTransform[4];//明るく残す四角の左・右・上・下を囲む暗い板
+    private Text guideArrow, guideLabel;
+    private Vector2 guideArrowBase;//矢印の位置（ここから上下に揺らす）
+    private bool guideShown;
+
     private List<Step> steps;
 
     void Start()
@@ -175,6 +188,10 @@ public class Tutorial : MonoBehaviour
 
     void Update()
     {
+        //案内はすばやく出し入れし、出ている間は矢印を上下に揺らす
+        guideGroup.alpha = Mathf.MoveTowards(guideGroup.alpha, guideShown ? 1f : 0f, Time.deltaTime / 0.15f);
+        if (guideShown) guideArrow.rectTransform.anchoredPosition = guideArrowBase + new Vector2(0f, 14f * Mathf.Sin(Time.time * 6f));
+
         if (finished || InputManager.instance == null) return;
 
         bool allHeld = true;
@@ -192,18 +209,18 @@ public class Tutorial : MonoBehaviour
     }
 
     //チュートリアルを終えて選曲画面へ移る（最後まで練習した場合も、スキップした場合も）
-    //immediate: 運営のプレイスキップ（GameManager）。演出なしですぐ切り替える
-    public void Finish(bool immediate = false)
+    //（運営の全スキップはSceneLoader.ReturnToTitleがオープニングへ戻すので、ここは通らない）
+    public void Finish()
     {
         if (finished) return;
         finished = true;
         StopAllCoroutines();
+        guideShown = false;//最初のノーツで止まっている途中なら、案内を消す
         PlaySession.IsTutorial = false;
         //チュートリアル用の初心者向け設定から、始める前の設定に戻す
         if (PlaySession.SettingsBeforeTutorial != null) PlaySession.SettingsBeforeTutorial.Apply();
         PlaySession.SettingsBeforeTutorial = null;
-        if (immediate) SceneLoader.ChangeScene(GameScene.MusicSelect);
-        else SceneFader.FadeTo(GameScene.MusicSelect, Color.black);
+        SceneFader.FadeTo(GameScene.MusicSelect, Color.black);
     }
 
     IEnumerator Run()
@@ -223,12 +240,103 @@ public class Tutorial : MonoBehaviour
             float firstNoteTime = MusicManager.instance.CurrentPlayTime + NoteManager.instance.TravelSeconds + LeadSeconds;
             NoteManager.instance.LoadChart(Chart(step.notes, firstNoteTime), "tutorial_" + (i + 1));
             yield return HideText();
+            if (step.freezeHint != null) yield return WaitAtFirstNote(step);
             while (!NoteManager.instance.AllNotesCleared) yield return null;
             yield return new WaitForSeconds(StepGapSeconds);
         }
 
         yield return ShowText("これでチュートリアルは終了です", "選曲画面で好きな曲を遊ぼう！");
         Finish();
+    }
+
+    // ===== 最初のノーツで止めて待つ =====
+    //練習の最初のノーツが、判定ラインに来る時刻（±0ms）までに押されなかったら、時計を止めてノーツを判定ラインに置いたままにする
+    //ノーツの周り以外を暗くして矢印で「これを押す」と示し、押されたらPRECISE+にして元どおり進める
+    //時刻より前に押された場合（早押しのAPPROXなど）は止めずにそのまま進む
+    IEnumerator WaitAtFirstNote(Step step)
+    {
+        //最初のノーツと、それがまだ判定されていないかを調べる方法（種類ごとにリストが違う）
+        NoteManager notes = NoteManager.instance;
+        System.Func<bool> pending;
+        float time;
+        int lane, width;
+        switch (step.notes[0].type)
+        {
+            case "tap":
+                if (notes.notes.Count == 0) yield break;
+                var tap = notes.notes[0];
+                pending = () => notes.notes.Contains(tap);//判定されるとリストから消える
+                time = tap.expectedTime; lane = tap.lane; width = tap.width;
+                break;
+            case "hold":
+                if (notes.holds.Count == 0) yield break;
+                var hold = notes.holds[0];
+                pending = () => notes.holds.Contains(hold);
+                time = hold.expectedTime; lane = hold.lane; width = hold.width;
+                break;
+            default://slide。始点が判定されると（押されても見逃されても）Noneではなくなる
+                if (notes.LongNotes.Count == 0) yield break;
+                var slide = notes.LongNotes[0];
+                pending = () => slide.state == LongNoteState.None;
+                time = slide.startExpectedTime; lane = slide.startLane; width = slide.startWidth;
+                break;
+        }
+
+        //判定に使う時刻（判定タイミングの調整を引いたもの）がノーツの時刻になるまで待つ
+        //コルーチンはそのフレームの判定（JudgeManager.Update）の後に動くので、ちょうどのフレームで押された場合は止めない
+        while (pending() && MusicManager.instance.CurrentPlayTime - JudgeManager.JudgeOffset < time) yield return null;
+        if (!pending()) yield break;
+
+        MusicManager.instance.SetPaused(true);
+        JudgeManager.instance.forcePrecisePlus = true;
+        ShowGuide(lane, width, step.freezeHint);
+        while (pending()) yield return null;
+        guideShown = false;
+        JudgeManager.instance.forcePrecisePlus = false;
+        MusicManager.instance.SetPaused(false);
+    }
+
+    //ノーツ（判定ライン上のlane〜lane+width）の周りだけを残して画面を暗くし、上に矢印と案内を出す
+    void ShowGuide(int lane, int width, string hint)
+    {
+        const float marginX = 50f;//ノーツの左右に残す明るい部分
+        const float halfHeight = 110f;//判定ラインの上下に残す明るい部分
+
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        Vector2 a = ToCanvas(cam, LaneLayout.SurfacePoint(lane, 0f));
+        Vector2 b = ToCanvas(cam, LaneLayout.SurfacePoint(lane + width, 0f));
+        float xMin = Mathf.Min(a.x, b.x) - marginX;
+        float xMax = Mathf.Max(a.x, b.x) + marginX;
+        float yMin = Mathf.Min(a.y, b.y) - halfHeight;
+        float yMax = Mathf.Max(a.y, b.y) + halfHeight;
+        float halfW = canvas.rect.width / 2f;
+        float halfH = canvas.rect.height / 2f;
+
+        //明るく残す四角の左・右・上・下を、4枚の暗い板で囲む
+        SetArea(guideShades[0], -halfW, xMin, -halfH, halfH);
+        SetArea(guideShades[1], xMax, halfW, -halfH, halfH);
+        SetArea(guideShades[2], xMin, xMax, yMax, halfH);
+        SetArea(guideShades[3], xMin, xMax, -halfH, yMin);
+
+        guideArrowBase = new Vector2((xMin + xMax) / 2f, yMax + 60f);
+        guideArrow.rectTransform.anchoredPosition = guideArrowBase;
+        guideLabel.text = hint;
+        guideLabel.rectTransform.anchoredPosition = guideArrowBase + new Vector2(0f, 110f);
+        guideShown = true;
+    }
+
+    //ワールド座標の点を、キャンバスの座標（真ん中が原点）に直す
+    Vector2 ToCanvas(Camera cam, Vector3 world)
+    {
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas, cam.WorldToScreenPoint(world), null, out Vector2 local);
+        return local;
+    }
+
+    //キャンバスの座標でxMin〜xMax・yMin〜yMaxの四角にする（幅や高さが無ければ見えなくなる）
+    static void SetArea(RectTransform rect, float xMin, float xMax, float yMin, float yMax)
+    {
+        Place(rect, new Vector2((xMin + xMax) / 2f, (yMin + yMax) / 2f), new Vector2(Mathf.Max(0f, xMax - xMin), Mathf.Max(0f, yMax - yMin)));
     }
 
     //説明を出してTextSeconds秒見せる（隠すのはHideText）
@@ -297,6 +405,21 @@ public class Tutorial : MonoBehaviour
     {
         canvas = CreateCanvas("TutorialCanvas", 20, 0f);
         Sprite gradient = SensorGlow.CreateGradientSprite();
+
+        //最初のノーツで止めて待つときの案内。説明やスキップ案内より奥に描く（先に作る）。位置と大きさはShowGuideで決める
+        RectTransform guide = CreateRect("Guide", canvas);
+        Stretch(guide);
+        guideGroup = guide.gameObject.AddComponent<CanvasGroup>();
+        guideGroup.alpha = 0f;
+        for (int i = 0; i < guideShades.Length; i++)
+        {
+            guideShades[i] = CreateImage("Shade" + i, guide, new Color(0f, 0f, 0f, 0.75f)).rectTransform;
+        }
+        guideArrow = CreateText("Arrow", guide, "▼", 96, TextAnchor.MiddleCenter, FontStyle.Bold);
+        guideArrow.color = new Color(1f, 0.85f, 0.3f);
+        Place(guideArrow.rectTransform, Vector2.zero, new Vector2(200f, 110f));
+        guideLabel = CreateText("Label", guide, "", 60, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Place(guideLabel.rectTransform, Vector2.zero, new Vector2(1600f, 90f));
 
         //説明は画面の真ん中より少し上に出す（出している間はノーツを流さないので、レーンを隠してもよい）
         RectTransform band = CreateRect("Panel", canvas);

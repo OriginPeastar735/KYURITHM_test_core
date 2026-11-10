@@ -130,7 +130,11 @@ public static class SongLibrary
         //リストの番号を難易度の番号に合わせる。途中の難易度が無い曲（INTERPLAYだけある曲など）はその場所をnullにする
         int count = charts.Length;
         while (charts[count - 1] == null) count--;//songMetaがあるので、どれか1つは譜面がある
-        for (int i = 0; i < count; i++) song.difficulties.Add(charts[i]);
+        for (int i = 0; i < count; i++)
+        {
+            if (charts[i] != null) charts[i].chartId = DifficultyData.MakeChartId(song.title, song.artist, i);
+            song.difficulties.Add(charts[i]);
+        }
         return song;
     }
 

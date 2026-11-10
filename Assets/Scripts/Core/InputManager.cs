@@ -45,6 +45,8 @@ public class InputManager : MonoBehaviour
     [SerializeField] private KeyCode switchKey = KeyCode.F1;//プレイ中に押すと Keyboard → Controller → Both の順に切り替わる
     [SerializeField] private KeyCode resetKey = KeyCode.F5;//押すと、今タッチ中になっているセンサーを誤作動として扱いリセットする（どのシーンでも効く）
 
+    [SerializeField] private KeyCode skipKey = KeyCode.F12;//運営の全スキップ。今のプレイを打ち切ってオープニングへ戻る（どのシーンでも効く）
+
     //テストプレイ用キー配置（左から順に4レーンずつ担当）
     [SerializeField]
     private KeyCode[] testKeys =
@@ -59,14 +61,30 @@ public class InputManager : MonoBehaviour
     //  1バイト目: lane 0〜7（左斜面）  2バイト目: lane 8〜15（底面）
     //  3バイト目: lane16〜23（底面）    4バイト目: lane24〜31（右斜面）
     //  各バイトの最下位ビット(bit0)が一番小さいレーン番号。1なら押されている
-    [SerializeField] private string portName = "COM3"; //シリアルポート名
+    //ポートは自動で探す（パケットが届くポートを選ぶ）ので、普通は合わせなくてよい。ここに書いたポートは先に試す
+    [SerializeField] private string portName = "COM3";
     private const int baudRate = 115200;
     private const byte packetHeader = 0xAA;
     private const int payloadBytes = LaneCount / 8;//4バイト
+    private const float RetrySeconds = 1f;//見つからない・切れたときに探し直す間隔
+    private const float SilentSeconds = 2f;//つながっているのにこの秒数パケットが来なければ、切れたものとして探し直す
+    private const float MissingNoticeSeconds = 3f;//この秒数探しても見つからなければ画面に知らせる
 
-    private SerialPort port;
+    //受信スレッド1本分。止めるときはstopを立てる（スレッドがポートを開いている途中でも、終わったら自分で閉じる）
+    private class ReadSession
+    {
+        public volatile bool stop;
+    }
+    private ReadSession session;
     private Thread readThread;
-    private volatile bool reading;
+    private volatile SerialPort activePort;//今つながっているポート（受信スレッドが入れる）。F5のリセットを送るのに使う
+
+    //受信スレッドからメインスレッドへの、接続状態のお知らせ（Notice.Showはメインスレッドでしか呼べない）
+    private enum ConnectionEvent { Connected, Lost, Missing }
+    private readonly ConcurrentQueue<(ConnectionEvent type, string port)> connectionEvents = new ConcurrentQueue<(ConnectionEvent, string)>();
+    //InputManagerはシーンごとに作り直されるので、最後につながったポートと画面に知らせた状態はstaticで持つ
+    private static volatile string lastPort;//最後につながったポート。次に探すとき最初に試す
+    private static int noticedState;//0: まだ知らせていない  1: つながったと知らせた  2: つながっていないと知らせた
 
     //センサーの押下状態が変わったときの記録。受信スレッドが積み、Updateが受信順に取り出す
     private struct SensorEvent
@@ -95,6 +113,8 @@ public class InputManager : MonoBehaviour
             SetSource((InputSource)(((int)source + 1) % 3));
         }
         if (Input.GetKeyDown(resetKey)) ResetStuckSensors();
+        if (Input.GetKeyDown(skipKey)) SceneLoader.ReturnToTitle();
+        ShowConnectionNotices();
 
         //前のフレームの押下状態を残してから、このフレームの状態を読み直す
         Array.Copy(laneHeld, prevHeld, LaneCount);
@@ -169,6 +189,7 @@ public class InputManager : MonoBehaviour
         Notice.Show($"センサーをリセットしました（レーン {string.Join(", ", lanes)}）");
         try
         {
+            SerialPort port = activePort;
             if (port != null && port.IsOpen) port.Write(units.ToArray(), 0, units.Count);
         }
         catch (Exception e)
@@ -255,56 +276,107 @@ public class InputManager : MonoBehaviour
         CloseController();
     }
 
+    //受信スレッドを始める。コントローラーを探してつなぐのも、切れたときにつなぎ直すのも受信スレッドが行う
+    //（ポートを開くのに時間がかかることがあるので、メインスレッドでは開かない）
     private void OpenController()
     {
-        if (port != null) return;//接続済み
-        try
-        {
-            port = new SerialPort(portName, baudRate);
-            port.DtrEnable = true;
-            port.ReadTimeout = 100;
-            port.Open();
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning("コントローラーに接続できません: " + e.Message);
-            port = null;
-            return;//キーボードのみで動作
-        }
-        reading = true;
-        readThread = new Thread(ReadLoop) { IsBackground = true };
+        if (session != null) return;//受信中
+        session = new ReadSession();
+        ReadSession s = session;
+        readThread = new Thread(() => ReadLoop(s)) { IsBackground = true };
         readThread.Start();
     }
 
     private void CloseController()
     {
-        reading = false;
-        if (readThread != null) readThread.Join(300);
+        if (session != null) session.stop = true;
+        session = null;
+        if (readThread != null) readThread.Join(300);//ポートは受信スレッドが終わるときに閉じる
         readThread = null;
-        if (port != null && port.IsOpen) port.Close();
-        port = null;
         while (sensorEvents.TryDequeue(out _)) { }
         controllerMask = 0;
         //ignoredMaskは消さない（シーンの切り替えでも呼ばれるので、消すと次のシーンでまた押しっぱなしになる）
     }
 
-    //押下状態が変わったときだけ、受信した時刻と一緒に記録する
-    private void ReadLoop()
+    //受信スレッドからの接続状態を画面に知らせる。同じ状態を続けて知らせない（シーンが変わるたびにつなぎ直すため）
+    private void ShowConnectionNotices()
+    {
+        while (connectionEvents.TryDequeue(out var e))
+        {
+            switch (e.type)
+            {
+                case ConnectionEvent.Connected:
+                    if (noticedState != 1) Notice.Show($"コントローラーに接続しました（{e.port}）");
+                    noticedState = 1;
+                    break;
+                case ConnectionEvent.Lost:
+                    Notice.Show("コントローラーとの接続が切れました。自動でつなぎ直します");
+                    noticedState = 2;
+                    break;
+                case ConnectionEvent.Missing:
+                    if (noticedState != 2) Notice.Show("コントローラーが見つかりません。自動で探し続けます");
+                    noticedState = 2;
+                    break;
+            }
+        }
+    }
+
+    //コントローラーを探してつなぎ、パケットを読み続ける。切れたら探し直す
+    private void ReadLoop(ReadSession s)
+    {
+        long searchStart = Stopwatch.GetTimestamp();
+        bool missingNoticed = false;
+        while (!s.stop)
+        {
+            SerialPort port = FindController(s);
+            if (port == null)
+            {
+                if (!missingNoticed && SecondsSince(searchStart) >= MissingNoticeSeconds)
+                {
+                    connectionEvents.Enqueue((ConnectionEvent.Missing, null));
+                    missingNoticed = true;
+                }
+                Wait(s, RetrySeconds);
+                continue;
+            }
+
+            lastPort = port.PortName;
+            activePort = port;
+            connectionEvents.Enqueue((ConnectionEvent.Connected, port.PortName));
+            ReadPackets(port, s);
+            activePort = null;
+            ClosePort(port);
+            if (s.stop) break;
+
+            connectionEvents.Enqueue((ConnectionEvent.Lost, null));
+            searchStart = Stopwatch.GetTimestamp();
+            missingNoticed = true;//切れたことは知らせたので、見つからないお知らせは重ねない
+            Wait(s, RetrySeconds);
+        }
+    }
+
+    //パケットを読み、押下状態が変わったときだけ受信した時刻と一緒に記録する。切れたら（または止められたら）戻る
+    private void ReadPackets(SerialPort port, ReadSession s)
     {
         uint lastMask = 0;
         void Push(uint mask)
         {
-            if (mask == lastMask) return;
+            if (s.stop || mask == lastMask) return;
             sensorEvents.Enqueue(new SensorEvent { timestamp = Stopwatch.GetTimestamp(), mask = mask });
             lastMask = mask;
         }
 
-        while (reading)
+        long lastPacket = Stopwatch.GetTimestamp();
+        while (!s.stop)
         {
             try
             {
                 //ヘッダーが来るまで読み飛ばし、続く4バイトを32レーン分のビットにまとめる
-                if (port.ReadByte() != packetHeader) continue;
+                if (port.ReadByte() != packetHeader)
+                {
+                    if (SecondsSince(lastPacket) >= SilentSeconds) break;//パケットではないデータしか来ない
+                    continue;
+                }
                 uint mask = 0;
                 for (int i = 0; i < payloadBytes; i++)
                 {
@@ -313,10 +385,12 @@ public class InputManager : MonoBehaviour
                     mask |= (uint)b << (i * 8);
                 }
                 Push(mask);
+                lastPacket = Stopwatch.GetTimestamp();
             }
             catch (TimeoutException)
             {
                 Push(0);//データが途切れたら押しっぱなしにしない
+                if (SecondsSince(lastPacket) >= SilentSeconds) break;//コントローラーが止まった・抜かれた
             }
             catch (Exception)
             {
@@ -324,5 +398,92 @@ public class InputManager : MonoBehaviour
             }
         }
         Push(0);
+    }
+
+    //コントローラーのポートを探して開く。最後につながったポート → Inspectorのポート → 残りのポートの順に試す。無ければnull
+    private SerialPort FindController(ReadSession s)
+    {
+        var candidates = new List<string>();
+        void Add(string name)
+        {
+            if (!string.IsNullOrEmpty(name) && !candidates.Contains(name)) candidates.Add(name);
+        }
+        Add(lastPort);
+        Add(portName);
+        try
+        {
+            string[] names = SerialPort.GetPortNames();
+            Array.Sort(names, StringComparer.Ordinal);
+            foreach (string name in names) Add(name);
+        }
+        catch (Exception)
+        {
+            //ポートの一覧が取れなくても、上の2つは試す
+        }
+
+        foreach (string name in candidates)
+        {
+            if (s.stop) return null;
+            SerialPort port = null;
+            try
+            {
+                port = new SerialPort(name, baudRate);
+                port.DtrEnable = true;
+                port.ReadTimeout = 100;
+                port.Open();
+                if (IsController(port)) return port;
+            }
+            catch (Exception)
+            {
+                //開けない・読めないポートは飛ばす
+            }
+            ClosePort(port);
+        }
+        return null;
+    }
+
+    //コントローラーのパケット（ヘッダー＋4バイト）が続けて届くポートか。別の機器のポートを選ばないための確認
+    private static bool IsController(SerialPort port)
+    {
+        const int packetsNeeded = 3;
+        const float checkSeconds = 0.5f;
+        long start = Stopwatch.GetTimestamp();
+        int packets = 0;
+        while (SecondsSince(start) < checkSeconds)
+        {
+            if (port.ReadByte() != packetHeader)//届かなければTimeoutExceptionになり、呼び出し側で飛ばされる
+            {
+                packets = 0;
+                continue;
+            }
+            for (int i = 0; i < payloadBytes; i++) port.ReadByte();
+            packets++;
+            if (packets >= packetsNeeded) return true;
+        }
+        return false;
+    }
+
+    private static void ClosePort(SerialPort port)
+    {
+        try
+        {
+            if (port != null && port.IsOpen) port.Close();
+        }
+        catch (Exception)
+        {
+            //抜かれたポートは閉じるときにも例外が出ることがある
+        }
+    }
+
+    private static double SecondsSince(long timestamp)
+    {
+        return (Stopwatch.GetTimestamp() - timestamp) / (double)Stopwatch.Frequency;
+    }
+
+    //止められたらすぐ戻れるよう、短く区切って待つ
+    private static void Wait(ReadSession s, float seconds)
+    {
+        long start = Stopwatch.GetTimestamp();
+        while (!s.stop && SecondsSince(start) < seconds) Thread.Sleep(50);
     }
 }

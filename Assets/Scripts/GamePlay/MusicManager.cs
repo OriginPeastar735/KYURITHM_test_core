@@ -97,6 +97,7 @@ public class MusicManager : MonoBehaviour
     //Stopwatch.GetTimestamp()で取った時刻が、曲の再生時間で何秒か（入力を押した時刻の判定に使う）
     public float ToPlayTime(long timestamp)
     {
+        if (paused) return CurrentPlayTime;//止めている間はいつ押しても今の時刻
         return CurrentPlayTime + (float)((timestamp - frameTimestamp) / (double)Stopwatch.Frequency);
     }
 
@@ -106,6 +107,29 @@ public class MusicManager : MonoBehaviour
         if (isPlaying || seconds <= startDelay) return;
         startDelay = seconds;
         CurrentPlayTime = -startDelay - TimingOffset;
+    }
+
+    private bool paused;
+    private long pauseTimestamp;//止めたときのStopwatchの値
+    private double pauseDspTime;//止めたときのdspTime
+
+    //時計を止める・動かす。チュートリアル（曲を流さない）で、ノーツを判定ラインに止めて入力を待つのに使う
+    //止めている間CurrentPlayTimeは変わらず、動かすと止めたところから続く。曲を流しているときは音が止まらないので使わない
+    public void SetPaused(bool pause)
+    {
+        if (pause == paused) return;
+        paused = pause;
+        if (pause)
+        {
+            pauseTimestamp = Stopwatch.GetTimestamp();
+            pauseDspTime = AudioSettings.dspTime;
+        }
+        else
+        {
+            //止めていた時間だけ、開始の時刻を後ろへずらす
+            startTimestamp += Stopwatch.GetTimestamp() - pauseTimestamp;
+            dspStartTime += AudioSettings.dspTime - pauseDspTime;
+        }
     }
 
     void StartMusic()
@@ -127,6 +151,7 @@ public class MusicManager : MonoBehaviour
             if (CanStart) StartMusic();
             return;
         }
+        if (paused) return;
 
         //現在のplayTime = 再生開始からの経過時間（Stopwatchで測り、dspTimeとの差を少しずつ補正する）
         //再生前はマイナスの値になり、再生されると0から始まる

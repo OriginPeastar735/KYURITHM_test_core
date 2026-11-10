@@ -18,6 +18,7 @@ public class PlayPreset
     public int noteThickness;
     public bool showFastLate;
     public int songOffset;
+    public bool tapSound;//どちらのプリセットもOFF（書かなければOFF）
 
     public static readonly PlayPreset Beginner = new PlayPreset
     {
@@ -51,6 +52,7 @@ public class PlayPreset
             noteThickness = PlaySession.NoteThicknessPercent,
             showFastLate = PlaySession.ShowFastLate,
             songOffset = PlaySession.SongOffsetMs,
+            tapSound = PlaySession.TapSound,
         };
     }
 
@@ -66,6 +68,7 @@ public class PlayPreset
         PlaySession.NoteThicknessPercent = noteThickness;
         PlaySession.ShowFastLate = showFastLate;
         PlaySession.SongOffsetMs = songOffset;
+        PlaySession.TapSound = tapSound;
     }
 
     //今の設定と同じプリセット。どれとも違えば（適用した後に設定を変えたら）null
@@ -82,5 +85,6 @@ public class PlayPreset
         && PlaySession.KeyBeamPercent == keyBeam
         && PlaySession.NoteThicknessPercent == noteThickness
         && PlaySession.ShowFastLate == showFastLate
-        && PlaySession.SongOffsetMs == songOffset;
+        && PlaySession.SongOffsetMs == songOffset
+        && PlaySession.TapSound == tapSound;
 }

@@ -25,9 +25,13 @@ public static class LaneLayout
     //ノーツの縁はこれより0.002下がる（LaneSurfaceShape.OutlineDrop）ので、その分も含めて上に出る値にする
     public const float NoteHeight = 0.02f;
 
-    //タップ・ホールドを浮かせる高さ。slide（帯・始点・中間ノーツ）と重なったときに上に見えるよう、NoteHeightより少し高くする
+    //タップを浮かせる高さ。slide（帯・始点・中間ノーツ）と重なったときに上に見えるよう、NoteHeightより少し高くする
     //slideのノーツの中心の線（上面から約0.002上）よりも、タップ・ホールドの縁（0.002下がる）が上に出る差にする
     public const float TopNoteHeight = NoteHeight + 0.01f;
+
+    //ホールドを浮かせる高さ。タップと同じ場所に重なったとき、細いホールドが太いタップの上に見えるよう、タップより少し高くする
+    //（同じ高さだと面が重なってチラつき、どちらも見えにくくなる）
+    public const float HoldNoteHeight = TopNoteHeight + 0.01f;
 
     //水平部分と傾斜部分の境目（折れ目）のレーン位置
     public static float LeftFold => SideLaneCount;//8

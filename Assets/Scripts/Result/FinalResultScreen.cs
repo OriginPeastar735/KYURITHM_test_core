@@ -14,7 +14,7 @@ using static UIUtil;
 //
 //帯が順に流れ込み、合計スコアを数え上げた後、どこかのセンサーに触れる（か時間が経つ）とコンティニューするか聞く
 //  右斜面: コンティニュー。設定はそのままで、演出を挟んで選曲画面へ（1曲目から）
-//  左斜面・制限時間切れ: 終了。エンディング（THANK YOU FOR PLAYING!）へ
+//  左斜面・制限時間切れ: 終了。設定を初心者向けプリセットに戻し、エンディング（THANK YOU FOR PLAYING!）へ
 public class FinalResultScreen : MonoBehaviour
 {
     //帯の形と並び（キャンバス座標。画面の真ん中が原点）
@@ -147,11 +147,11 @@ public class FinalResultScreen : MonoBehaviour
         else if ((canAnswer && SlopePressed(0, leftSlopeKeys)) || remaining <= 0f) End();
     }
 
-    //終了。エンディングでTHANK YOU FOR PLAYING!を出してオープニングへ戻る
+    //終了。設定を初心者向けプリセットに戻し、エンディングでTHANK YOU FOR PLAYING!を出してオープニングへ戻る
     void End()
     {
         leaving = true;
-        System.Array.Clear(PlaySession.TrackResults, 0, PlaySession.TrackResults.Length);//次のプレイヤーに残さない
+        PlaySession.EndSession();//結果も設定も次のプレイヤーに残さない（初心者向けプリセット＋判定タイミング0＋小節線ON）
         SceneFader.FadeTo(GameScene.Ending, Color.black);
     }
 
@@ -443,15 +443,6 @@ public class FinalResultScreen : MonoBehaviour
         ShrinkToFit(difficulty);
         var level = CreateText("Level", row, $"Lv.{result.level}", 48, TextAnchor.MiddleLeft, FontStyle.Bold);
         Place(level.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(left + 220f, 38f), new Vector2(160f, 60f));
-
-        //プレイスキップした曲は、スコアと判定数の代わりに"Skipped"と出す
-        if (result.skipped)
-        {
-            var skipped = CreateText("Skipped", row, "Skipped", 96, TextAnchor.MiddleRight, FontStyle.Bold);
-            skipped.color = LabelColor;
-            Place(skipped.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(JacketWidth + InfoWidth - 60f, 0f), new Vector2(600f, 130f));
-            return;
-        }
 
         var score = CreateText("Score", row, result.score.ToString(), 96, TextAnchor.MiddleRight, FontStyle.Bold);
         Place(score.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(JacketWidth + InfoWidth - 60f, 38f), new Vector2(440f, 110f));

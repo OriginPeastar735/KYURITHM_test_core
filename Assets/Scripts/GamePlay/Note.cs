@@ -8,6 +8,8 @@ public class Note : MonoBehaviour
     public float noteBar;//ノーツの小節位置
     public float scrollSpeed = 1000f;//1小節あたりに進む距離（NoteManagerがハイスピードから設定する）
     public float expectedTime;//判定ラインに来る時刻（曲の再生時間、秒）
+    //これより前に押した入力では判定しない時刻。縦に重なる前のノーツがあるとき、NoteManagerがそのノーツとの中間の時刻を入れる
+    [System.NonSerialized] public float earliestPressTime = float.NegativeInfinity;
     public int lane;//ノーツの始点レーン
     public int width;//ノーツが占めるレーン数
     public float centerLane; //ノーツ中心のレーン位置（エフェクトの位置などで使用）

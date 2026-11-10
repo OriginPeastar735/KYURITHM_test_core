@@ -26,6 +26,14 @@ public class DifficultyData
 {
     public int level;
     public string chartName;//譜面。StreamingAssetsからの相対パス（.json）か、Resources内の名前（仮の曲用）
+    public string chartId;//譜面の目印（MakeChartId）。スコアの記録に使う。ファイル名やフォルダ名を変えても変わらない
+
+    //曲名・作曲者・難易度から譜面の目印を作る（譜面エディタの出力にIDが無いので、ゲーム側で作る）
+    //曲名や作曲者の表記を変えると別の譜面扱いになり、それまでの記録とつながらなくなる
+    public static string MakeChartId(string title, string artist, int difficulty)
+    {
+        return $"{title}|{artist}|{DifficultyInfo.Names[difficulty]}";
+    }
     public string designer;//譜面制作者
     public int highScore;//ハイスコア（選曲画面を開いたときにHighScoreStoreの記録で上書きする）
     public bool played;//遊んだことがあるか。falseなら「未プレイ」と出す（スコア0で遊んだ場合と区別する）

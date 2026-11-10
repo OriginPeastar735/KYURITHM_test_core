@@ -34,7 +34,8 @@ Opening からチュートリアルを選ぶと Play（PlaySession.IsTutorial）
 
 - シーン切り替えは必ず `SceneLoader.ChangeScene` / `PreloadScene` を使う。`GameScene` の名前は Unity のシーン名と同じにする
 - シーンをまたぐデータはすべて static の `PlaySession` に置く
-- ハイスコア（`HighScoreStore`）はメモリにだけ持つ。ゲームを終了すると消えるのは仕様（展示で次の人に引き継がないため）
+- ハイスコア（`HighScoreStore`）は筐体の記録としてファイル（`highscores.json`）に保存する。目印は `DifficultyData.chartId`（曲名|作曲者|難易度）。今後 Web サイトと連携してプレイヤーごとにスコアを保存する予定（今はログインが無く、`PlaySession.PlayerName` は「ゲスト」固定・`PlayerId` は空）。ログインしたプレイヤーの結果はプレイを終えたときにまとめて送る方針で、今は送る分を `pending_uploads.json` にためる所まで。スコアの保存・読み出しは `HighScoreStore` を通す
+- プレイヤーが替わるときに戻すもの（設定・曲数・結果）は `PlaySession.EndSession` に集める。戻す処理をほかの場所に書かない
 - 筐体ごとの調整（画面の大きさ・位置、タイミング）は `DisplayFit` が `display_fit.json` に保存する。プレイヤーの「楽曲タイミング」（`PlaySession.SongOffsetMs`）はそれに足して使う
 - 設定項目を増やしたら `PlayPreset` の `Capture` / `Apply` と各プリセットにも足す
 
@@ -47,7 +48,7 @@ Opening からチュートリアルを選ぶと Play（PlaySession.IsTutorial）
 
 ### 運営用キー
 
-F1: 入力元の切り替え ／ F5: センサーリセット（どのシーンでも効く） ／ F9: オープニングで画面合わせ・タイミング合わせ ／ F12: プレイスキップ
+F1: 入力元の切り替え ／ F5: センサーリセット（どのシーンでも効く） ／ F9: オープニングで画面合わせ・タイミング合わせ ／ F12: 全スキップ（どのシーンからでもタイトルへ戻る。`SceneLoader.ReturnToTitle`）
 
 運営用の操作を増やすときはファンクションキーに割り当て、実行したら `Notice.Show(...)` で画面に知らせる。
 

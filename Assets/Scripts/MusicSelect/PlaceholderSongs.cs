@@ -42,7 +42,8 @@ public static class PlaceholderSongs
             int highScore = random.NextDouble() < 0.3 ? 0 : random.Next(700000, 1010001);
             string designer = designers[random.Next(designers.Length)];
             //仮の曲はすべて確認用の譜面test_long（約100秒、全種類のノーツ入り）にする
-            song.difficulties.Add(new DifficultyData { level = level, chartName = "test_long", designer = designer, highScore = highScore, played = highScore > 0 });
+            string chartId = DifficultyData.MakeChartId(title, artist, song.difficulties.Count);
+            song.difficulties.Add(new DifficultyData { level = level, chartName = "test_long", chartId = chartId, designer = designer, highScore = highScore, played = highScore > 0 });
         }
         songs.Add(song);
     }

@@ -1,4 +1,4 @@
-using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -35,9 +35,37 @@ public class JudgeTextDisplay : MonoBehaviour
         JudgeManager.Judged -= Show;
     }
 
+    //表示中の文字1つ分
+    class Item
+    {
+        public TextMeshPro text;
+        public Vector3 basePos;
+        public float startTime;
+    }
+
+    //文字のオブジェクトは判定のたびに作らず、消えたものを使い回す（スライドの判定点などで続けて出るため）
+    private readonly List<Item> showing = new List<Item>();
+    private readonly Stack<Item> unused = new Stack<Item>();
+    private Camera cam;
+
     void Show(JudgeResult result, float centerLane)
     {
-        GameObject obj = new GameObject($"JudgeText_{result}");
+        Item item = unused.Count > 0 ? unused.Pop() : CreateItem();
+        item.text.text = Label(result);
+        item.text.color = ColorOf(result);
+
+        //傾斜の上でも文字が横にずれないよう、面に垂直ではなく真上に浮かせる
+        item.basePos = LaneLayout.SurfacePos(centerLane) + Vector3.up * height;
+        item.basePos.z = EffectManager.instance != null ? EffectManager.instance.judgeLineZ : 0f;
+        item.startTime = Time.time;
+        item.text.gameObject.SetActive(true);
+        showing.Add(item);
+        Place(item, 0f);
+    }
+
+    Item CreateItem()
+    {
+        GameObject obj = new GameObject("JudgeText");
         obj.transform.SetParent(transform, false);
 
         TextMeshPro text = obj.AddComponent<TextMeshPro>();
@@ -45,31 +73,34 @@ public class JudgeTextDisplay : MonoBehaviour
         text.fontSize = fontSize;
         text.alignment = TextAlignmentOptions.Center;
         text.textWrappingMode = TextWrappingModes.NoWrap;
-        text.text = Label(result);
-        text.color = ColorOf(result);
-
-        //傾斜の上でも文字が横にずれないよう、面に垂直ではなく真上に浮かせる
-        Vector3 basePos = LaneLayout.SurfacePos(centerLane) + Vector3.up * height;
-        basePos.z = EffectManager.instance != null ? EffectManager.instance.judgeLineZ : 0f;
-        StartCoroutine(Animate(text, basePos));
+        return new Item { text = text };
     }
 
     //少しずつ上に動かしながら薄くして消す。文字は常にカメラの方を向ける
-    IEnumerator Animate(TextMeshPro text, Vector3 basePos)
+    void Update()
     {
-        Camera cam = Camera.main;
-        float startTime = Time.time;
-        while (true)
+        for (int i = showing.Count - 1; i >= 0; i--)
         {
-            float t = (Time.time - startTime) / showSeconds;
-            if (t >= 1f) break;
-
-            text.transform.position = basePos + Vector3.up * riseDistance * t;
-            if (cam != null) text.transform.rotation = cam.transform.rotation;
-            text.alpha = 1f - t * t;
-            yield return null;
+            Item item = showing[i];
+            float t = (Time.time - item.startTime) / showSeconds;
+            if (t < 1f)
+            {
+                Place(item, t);
+                continue;
+            }
+            item.text.gameObject.SetActive(false);
+            unused.Push(item);
+            showing.RemoveAt(i);
         }
-        Destroy(text.gameObject);
+    }
+
+    //t: 表示してからの進み具合(0〜1)
+    void Place(Item item, float t)
+    {
+        if (cam == null) cam = Camera.main;
+        item.text.transform.position = item.basePos + Vector3.up * riseDistance * t;
+        if (cam != null) item.text.transform.rotation = cam.transform.rotation;
+        item.text.alpha = 1f - t * t;
     }
 
     static string Label(JudgeResult result)

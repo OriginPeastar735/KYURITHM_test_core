@@ -18,6 +18,16 @@ public class SensorCameraFit : MonoBehaviour
     public float distance = 4f;//判定ラインがセンサーに重なるとき(judgeLineOffset=0)の、カメラから判定ラインまでの距離。小さいほど遠近感が強い
     [Range(0f, 0.3f)] public float judgeLineOffset = 0.15f;//判定ラインの底面の高さ（画面の高さに対する割合）。0で画面の下端（センサーに重なる）
 
+    //カメラから判定ラインまでの距離（Fitで置く位置と同じ計算）。画面上の長さからレーンの奥行きを求めるのに使う
+    public float JudgeLineDistance
+    {
+        get
+        {
+            float offset = Mathf.Clamp(judgeLineOffset, 0f, vanishingPointHeight * 0.9f);
+            return distance * vanishingPointHeight / (vanishingPointHeight - offset);
+        }
+    }
+
     private Camera cam;
     private int lastWidth, lastHeight;
     private float lastVanishing, lastDistance, lastOffset;
@@ -61,8 +71,7 @@ public class SensorCameraFit : MonoBehaviour
         //ここまででz=0の面がセンサーに重なる。カメラを後ろへ下げると、判定ラインは消失点に向かって小さくなり、
         //画面の高さに対する割合で vanishingPointHeight * (1 - distance / 判定ラインまでの距離) の高さに映る。
         //これがjudgeLineOffsetになる距離まで下げる（レーンの見え方は、レーンに沿って下がるだけなので変わらない）
-        float offset = Mathf.Clamp(judgeLineOffset, 0f, vanishingPointHeight * 0.9f);
-        float judgeDistance = distance * vanishingPointHeight / (vanishingPointHeight - offset);
+        float judgeDistance = JudgeLineDistance;
         transform.SetPositionAndRotation(new Vector3(centerX, cameraY, judgeDistance), Quaternion.Euler(0f, 180f, 0f));
 
         //z=0の面で映す範囲（カメラの正面からのずれ）を、ニアクリップ面の上の大きさに直して射影行列を作る

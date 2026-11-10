@@ -23,6 +23,11 @@ public class NoteManager : MonoBehaviour
     public float speedPerHiSpeed = 6f;//ハイスピード1あたり、ノーツが1秒に進む距離（ハイスピード5で30）
     [System.NonSerialized] public float scrollSpeed;//基本BPMの1小節あたりに進む距離。LoadJsonで選曲画面のハイスピードから計算する
 
+    const float ThicknessBasePercent = 25f;//プレハブの奥行きを、設定の「ノーツの太さ」の何%とするか（小さいほど全体が太くなる）
+    [Header("ノーツの太さ")]
+    public float holdDepthRatio = 0.6f;//ホールドの太さ（タップに対する割合）。タップと重なったときに見分けられるよう細くする
+    public float slideMidDepthRatio = 0.35f;//slideの中間ノーツの太さ（タップに対する割合）
+
     [Header("ノーツの見た目（長さはノーツの奥行きに対する割合）")]
     public float cornerRadiusRatio = 0.35f;//角の丸みの半径
     public bool showCenterLine = false;//ノーツの中心に線を入れるか（白いノーツでは見えないのでOFF）
@@ -94,12 +99,20 @@ public class NoteManager : MonoBehaviour
 
     //ノーツの角を丸め、withCenterLineなら中心に線を入れる。showOutlineなら周りに縁を付ける（SetRangeより前に呼ぶ）
     //ノーツの太さ（奥行き）も、選曲画面の設定に合わせてここで変える
-    public void ApplyNoteStyle(LaneSurfaceShape shape, bool withCenterLine)
+    //depthRatio: タップの太さに対する割合（ホールド・slideの中間ノーツを細くする）
+    //simple: 角を丸めず、縁も線も付けないただの板にする（slideの中間ノーツ。始点・終点と見分けやすくする）
+    public void ApplyNoteStyle(LaneSurfaceShape shape, bool withCenterLine, float depthRatio = 1f, bool simple = false)
     {
-        //プレハブの奥行きを太さ50%とする。LaneSurfaceShapeはSetStyleの時点のスケールを奥行きとして使うので、その前に変える
+        //プレハブの奥行きを太さ25%とする（100%でプレハブの4倍）。LaneSurfaceShapeはSetStyleの時点のスケールを奥行きとして使うので、その前に変える
         Vector3 scale = shape.transform.localScale;
-        scale.z *= PlaySession.NoteThicknessPercent / 50f;
+        scale.z *= PlaySession.NoteThicknessPercent / ThicknessBasePercent * depthRatio;
         shape.transform.localScale = scale;
+
+        if (simple)
+        {
+            shape.SetStyle(0f);
+            return;
+        }
 
         Material noteMaterial = shape.GetComponent<MeshRenderer>().sharedMaterial;
         if (withCenterLine && showCenterLine)
@@ -206,6 +219,7 @@ public class NoteManager : MonoBehaviour
         notes.Sort((a, b) => a.expectedTime.CompareTo(b.expectedTime));
         holds.Sort((a, b) => a.expectedTime.CompareTo(b.expectedTime));
         LongNotes.Sort((a, b) => a.startExpectedTime.CompareTo(b.startExpectedTime));
+        SetEarliestPressTimes();
 
         //小節線はプレイ中だけ（チュートリアルでは出さない）
         if (PlaySession.ShowBarLines && !PlaySession.IsTutorial) CreateBarLines(notesData.notes);
@@ -220,6 +234,42 @@ public class NoteManager : MonoBehaviour
         //生成したノーツは判定ライン(z=0)に置かれているので、すぐ流れてくる位置へ動かす
         //（このフレームのUpdateが済んだ後に読み込むと、1フレームだけ判定ラインの所に見えてしまうため）
         UpdatePositions();
+    }
+
+    //縦に重なるノーツの巻き込み対策（CHUNITHMと同じ考え方）
+    //押した瞬間を判定するノーツ（tap・slide始点）が、レーンが少しでも重なる位置に続けて来るとき、
+    //後ろのノーツは「前のノーツとの中間の時刻」より前に押した入力では判定しない
+    //（前のノーツを取った手や、数ms遅れて反応した隣のセンサーが、後ろのノーツを早押しで取ってしまわないように）
+    //間隔が狭いほど後ろのノーツを早く押せる幅も狭くなるので、速い縦連は擦っても悪い判定が出にくくなる
+    private void SetEarliestPressTimes()
+    {
+        const float maxGap = 1f;//これより離れた前のノーツは判定幅に関係しないので探さない
+
+        var targets = new List<(float time, int lane, int width, Note note, LongNote slide)>();
+        foreach (Note note in notes) targets.Add((note.expectedTime, note.lane, note.width, note, null));
+        foreach (LongNote slide in LongNotes)
+        {
+            if (slide.isFirstSection) targets.Add((slide.startExpectedTime, slide.startLane, slide.startWidth, null, slide));
+        }
+        targets.Sort((a, b) => a.time.CompareTo(b.time));
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            var current = targets[i];
+            float earliest = float.NegativeInfinity;
+            //時刻の近い順に前のノーツを見て、最初に見つかった重なるノーツとの中間にする（同じ時刻のノーツは前のノーツではない）
+            for (int j = i - 1; j >= 0 && current.time - targets[j].time <= maxGap; j--)
+            {
+                var previous = targets[j];
+                if (previous.time >= current.time) continue;
+                bool overlaps = previous.lane < current.lane + current.width && current.lane < previous.lane + previous.width;
+                if (!overlaps) continue;
+                earliest = (previous.time + current.time) / 2f;
+                break;
+            }
+            if (current.note != null) current.note.earliestPressTime = earliest;
+            else current.slide.earliestPressTime = earliest;
+        }
     }
 
     //ノーツが壁（見え始める位置）から判定ラインまで流れてくる秒数

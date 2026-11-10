@@ -165,14 +165,15 @@ public class LaneFieldBuilder : MonoBehaviour
     }
 
 
-    //押したレーンに出るキービーム。判定ラインから奥へ、選曲画面で設定した長さ（判定ラインから壁までの長さに対する%）だけ伸ばす
+    //押したレーンに出るキービーム。判定ラインから奥へ、選曲画面で設定した長さだけ伸ばす
+    //長さの%は「画面で見た、判定ラインから壁までの長さ」に対する割合（50%なら画面上でちょうど半分の所まで届く）
     //壁より奥はノーツが見えない所なので、100%で壁まで届くようにする
     //プレハブの箱の代わりにBeamMeshの板を使い、BeamTextureで上に凸の形にして奥ほど薄くする
     private void BuildLights()
     {
         if (LaneLightPrefab == null || PlaySession.KeyBeamPercent <= 0) return;
 
-        float length = LaneLayout.VisibleLength * PlaySession.KeyBeamPercent / 100f;
+        float length = DepthForScreenRatio(PlaySession.KeyBeamPercent / 100f);
         Mesh mesh = BeamMesh();
         Material material = QueuedMaterial(LaneLightPrefab, BeamQueue);
         if (material != null)
@@ -198,6 +199,23 @@ public class LaneFieldBuilder : MonoBehaviour
             KeyBeamFade fade = obj.GetComponentInChildren<KeyBeamFade>();
             if (fade != null) fade.laneIndex = lane;
         }
+    }
+
+    //画面で見て「判定ラインから壁までの長さ」のratio(0〜1)の所まで届く、レーンの奥行き（判定ラインからの距離）
+    //レーンは奥ほど小さく映るので、奥行きに比例させると少しの%で画面の真ん中まで届き、それ以上はほとんど変わらなく見える
+    //カメラから距離Dの判定ラインと、そこから奥行きdの点は、画面では消失点から 1/D と 1/(D+d) に比例した距離に映る
+    private float DepthForScreenRatio(float ratio)
+    {
+        float far = LaneLayout.VisibleLength;
+        Camera cam = Camera.main;
+        SensorCameraFit fit = cam != null ? cam.GetComponent<SensorCameraFit>() : null;
+        if (fit == null) return far * ratio;//カメラが無いときは奥行きに比例させる
+
+        float near = fit.JudgeLineDistance;
+        float nearOnScreen = 1f / near;
+        float farOnScreen = 1f / (near + far);
+        float onScreen = Mathf.Lerp(nearOnScreen, farOnScreen, Mathf.Clamp01(ratio));
+        return 1f / onScreen - near;
     }
 
     //区切り線は、選曲画面で設定したレーン数ごとに引く（濃さも設定どおり）

@@ -39,7 +39,7 @@ public class CardInfo
             squareText = sprite != null ? "" : "JACKET\n(仮)",
             title = song.title,
             subtitle = song.artist,
-            rank = "RANK -",//ランクは未実装なので仮の表示
+            rank = diff.played ? $"RANK {ScoreRank.Get(diff.highScore)}" : "RANK -",//遊んだ譜面はハイスコアのランク、未プレイは「-」
             highScore = diff.played ?$"HIGH SCORE\n{diff.highScore:N0}" : "HIGH SCORE\n未プレイ",
         };
     }
