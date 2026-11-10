@@ -54,7 +54,22 @@
         "ProjectSettings/": true,
         "UserSettings/": true,
         "temp/": true,
-        "Temp/": true
+        "Temp/": true,
+        "output_*/": true,
+        "output_*.zip": true
     },
-    "dotnet.defaultSolution": "KYURITHM.slnx"
+    "search.exclude": {
+        "Library/": true,
+        "Temp/": true,
+        "Logs/": true,
+        "UserSettings/": true,
+        "Assets/StreamingAssets/Songs/": true,
+        "**/*.csproj": true,
+        "**/*.slnx": true
+    },
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "files.encoding": "utf8",
+    "editor.renderWhitespace": "boundary"
 }

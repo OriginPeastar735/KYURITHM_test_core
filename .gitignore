@@ -102,3 +102,17 @@ InitTestScene*.unity*
 # StreamingAssets/Songs/<曲フォルダ>/ にDriveからコピーして使う
 /[Aa]ssets/StreamingAssets/Songs/*
 !/[Aa]ssets/StreamingAssets/Songs/.gitkeep
+
+# Unityが自動で作るソリューションファイル（プロジェクトのフォルダ名で作られるので人によって変わる）
+*.slnx
+
+# ビルドの出力（output_alpha / output_gamma など）。配布はDriveなどで行い、gitには入れない
+/output_*/
+/output_*.zip
+
+# Arduino IDEのコンパイル結果
+/Arduino/**/build/
+
+# Claude Codeの個人用設定（自分のパソコンのパスなどが入る）
+.claude/settings.local.json
+CLAUDE.local.md

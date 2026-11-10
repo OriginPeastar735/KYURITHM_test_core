@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "grep -qiE \"\\\"file_path\\\" *: *\\\"[^\\\"]*\\.(unity|prefab|asset|mat)\\\"\" && { echo \"シーン・プレハブ・.asset・.mat は直接書き換えない決まりです（CLAUDE.md）。コードで対応するか、Unity の Inspector での手順をユーザーに伝えてください。\" >&2; exit 2; } || exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -3,14 +3,12 @@
 //  Unity InputManager.cs 互換:  0xAA + 4バイト(32レーン) を 1ms ごとに送信
 //  環境: arduino-pico v6.3.0 / Adafruit_MPR121 v1.1.3
 //
-//  ※ 今使っているプログラムに、確認用のログモード(l)だけを足したもの。押下の判定は今と同じ
-//
 //  シリアルモニタからのコマンド (1文字送信):
-//    d : 診断モード (テキストで 生値/基準値/変化量 を表示)
-//    b : バイナリモード (Unity用。起動時はこちら)
-//    l : ログモード (全レーンの変化量と押下状態を 1行ずつ、約200回/秒で送る。Arduino/capture_sensor_log.py で記録する)
-//    r : 全センサーを再初期化 (基準値の取り直し・未接続ユニットの再検出)
-//    s : 接続状態を表示
+//    d   : 診断モード (テキストで 生値/基準値/変化量 を表示)
+//    b   : バイナリモード (Unity用。起動時はこちら)
+//    r   : 全センサーを再初期化 (基準値の取り直し・未接続ユニットの再検出)
+//    s   : 接続状態を表示
+//    0〜3 : そのユニットだけ再初期化 (Unity の F5 から送られる)
 // =====================================================================
 #include <Wire.h>
 #include <Adafruit_MPR121.h>
@@ -34,28 +32,22 @@ constexpr uint8_t ELE_MAP[NUM_UNITS][8] = {
 };
 
 // ----- 感度設定 -----
-constexpr uint8_t TOUCH_TH   = 12;   // 変化量がこれを超えたら押下
-constexpr uint8_t RELEASE_TH = 6;    // 変化量がこれを下回ったら解放
+constexpr uint8_t TOUCH_TH   = 10;   // 変化量がこれを超えたら押下
+constexpr uint8_t RELEASE_TH = 5;    // 変化量がこれを下回ったら解放
 
 // ----- 送信周期 -----
 constexpr uint32_t SEND_PERIOD_US = 1000;   // 1ms (1000回/秒)
-constexpr uint32_t LOG_PERIOD_US  = 5000;   // ログモードで1行送る間隔 (5ms = 200回/秒)
 
 // ----- 押しっぱなし自動復帰 (0で無効) -----
 constexpr uint32_t STUCK_MS = 0;
 
-// ----- MPR121 のレジスタ (ログモードで変化量をまとめて読む) -----
-constexpr uint8_t REG_FILTERED = 0x04;   // 計測値 (電極ごとに2バイト、下位バイトが先、10bit)
-constexpr uint8_t REG_BASELINE = 0x1E;   // 基準値 (電極ごとに1バイト、上位8bit)
-
 // =====================================================================
 Adafruit_MPR121 cap[NUM_UNITS];
 bool     present[NUM_UNITS];
-uint8_t  numEle[NUM_UNITS];
 uint8_t  laneBytes[NUM_UNITS];
 uint32_t heldSince[NUM_UNITS * 8];
 
-enum Mode { MODE_BINARY, MODE_DIAG, MODE_LOG };
+enum Mode { MODE_BINARY, MODE_DIAG };
 Mode mode = MODE_BINARY;
 
 bool initUnit(uint8_t u) {
@@ -63,12 +55,19 @@ bool initUnit(uint8_t u) {
 
   uint8_t n = 0;
   for (uint8_t k = 0; k < 8; k++) n = max<uint8_t>(n, ELE_MAP[u][k] + 1);
-  numEle[u] = n;
 
   cap[u].writeRegister(MPR121_ECR, 0x00);        // 停止モード (設定変更のため)
   cap[u].writeRegister(MPR121_DEBOUNCE, 0x00);   // 内部デバウンスなし = 最小遅延
   cap[u].writeRegister(MPR121_ECR, 0x80 | n);    // 計測開始
   return true;
+}
+
+// 1ユニットだけ再初期化 (基準値の取り直し)。Unity の F5 から '0'〜'3' で呼ばれる
+void reinitUnit(uint8_t u) {
+  present[u]   = initUnit(u);
+  laneBytes[u] = 0;
+  for (uint8_t k = 0; k < 8; k++) heldSince[u * 8 + k] = 0;
+  Wire.setClock(I2C_HZ);   // begin() で I2C のクロックが戻る場合に備えて設定し直す
 }
 
 void initAll() {
@@ -113,9 +112,7 @@ void scan() {
       }
     }
     if (reinit) {
-      present[u]   = initUnit(u);
-      laneBytes[u] = 0;
-      for (uint8_t k = 0; k < 8; k++) heldSince[u * 8 + k] = 0;
+      reinitUnit(u);
     }
   }
 }
@@ -145,50 +142,14 @@ void printDiag() {
   }
 }
 
-// ===== ログモード =====
-// 連続したレジスタをまとめて読む
-bool readBlock(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;
-  if (Wire.requestFrom(addr, len) != len) return false;
-  for (uint8_t i = 0; i < len; i++) buf[i] = Wire.read();
-  return true;
-}
-
-// 1行: L,時刻(ms),押下(32bitの16進),隣の押下(このプログラムでは常に0),変化量0,...,変化量31
-void printLogLine() {
-  char line[256];
-  uint32_t mask = 0;
-  for (uint8_t u = 0; u < NUM_UNITS; u++) mask |= (uint32_t)laneBytes[u] << (u * 8);
-  int len = snprintf(line, sizeof(line), "L,%lu,%08lX,00000000", (unsigned long)millis(), (unsigned long)mask);
-
-  for (uint8_t u = 0; u < NUM_UNITS; u++) {
-    uint8_t filtered[24], baseline[12];
-    uint8_t n = numEle[u];
-    bool ok = present[u] && readBlock(ADDRS[u], REG_FILTERED, filtered, n * 2)
-                         && readBlock(ADDRS[u], REG_BASELINE, baseline, n);
-    for (uint8_t k = 0; k < 8; k++) {
-      int d = 0;
-      if (ok) {
-        uint8_t e = ELE_MAP[u][k];
-        int f = (filtered[e * 2] | (filtered[e * 2 + 1] << 8)) & 0x3FF;
-        d = (baseline[e] << 2) - f;
-      }
-      len += snprintf(line + len, sizeof(line) - len, ",%d", d);
-    }
-  }
-  Serial.println(line);
-}
-
 void handleCommands() {
   while (Serial.available()) {
     char c = Serial.read();
     if      (c == 'd') { mode = MODE_DIAG;   printStatus(); }
     else if (c == 'b') { mode = MODE_BINARY; }
-    else if (c == 'l') { mode = MODE_LOG; printStatus(); Serial.printf("#touch=%u release=%u neighbor=0\n", TOUCH_TH, RELEASE_TH); }
     else if (c == 'r') { initAll(); if (mode == MODE_DIAG) printStatus(); }
     else if (c == 's') { printStatus(); }
+    else if (c >= '0' && c < '0' + NUM_UNITS) { reinitUnit(c - '0'); }
   }
 }
 
@@ -206,7 +167,6 @@ void setup() {
 void loop() {
   static uint32_t next     = micros();
   static uint32_t lastDiag = 0;
-  static uint32_t lastLog  = micros();
 
   handleCommands();
 
@@ -221,11 +181,6 @@ void loop() {
 
   if (mode == MODE_BINARY) {
     sendPacket();
-  } else if (mode == MODE_LOG) {
-    if (micros() - lastLog >= LOG_PERIOD_US) {
-      lastLog = micros();
-      printLogLine();
-    }
   } else if (millis() - lastDiag >= 100) {
     lastDiag = millis();
     printDiag();
