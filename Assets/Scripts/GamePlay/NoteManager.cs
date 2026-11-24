@@ -483,8 +483,9 @@ public class NoteManager : MonoBehaviour
     }
 
     // ===== 小節線 =====
-    //曲の再生前のLeadInBars小節ぶんと、tick 0から最後のノーツのある小節まで、1小節(barPertick)ごとに小節線を置く
+    //曲の再生前のLeadInBars小節ぶんと、tick 0から最後のノーツのある小節まで、1小節ごとに小節線を置く
     //譜面の小節線はtickで区切るので、BPM変更があっても譜面の小節に合う。再生前の小節線は再生開始(0秒)から基本BPMの1小節ずつさかのぼる
+    //1小節の長さは拍子で決まる（最初は4/4 = barPertick）。拍子変更線のある位置から新しい小節が始まる（エディタの forEachBar と同じ）
     private void CreateBarLines(List<ChartNoteData> chartNotes)
     {
         foreach (BarLine line in barLines) Destroy(line.obj);
@@ -493,7 +494,7 @@ public class NoteManager : MonoBehaviour
         float lastTick = 0f;
         foreach (var note in chartNotes)
         {
-            if (note.type == "bpm") continue;
+            if (note.type == "bpm" || note.type == "signature") continue;
             lastTick = Mathf.Max(lastTick, note.tick);
             if (note.sections == null) continue;
             foreach (var section in note.sections)
@@ -507,9 +508,33 @@ public class NoteManager : MonoBehaviour
         if (barLineMesh == null) barLineMesh = CreateBarLineMesh();
 
         for (int i = LeadInBars; i >= 1; i--) AddBarLine(DisplayBar(-i * barMillis));
-        for (float tick = 0f; tick <= lastTick + 1e-3f; tick += barPertick) AddBarLine(DisplayBar(ExpectedTime(tick)));
+        foreach (float tick in BarStartTicks(chartNotes, lastTick)) AddBarLine(DisplayBar(ExpectedTime(tick)));
         //offsetが1小節より大きくマイナスだと、曲の前の小節線より譜面の小節線の方が早くなるので並べ直す（UpdateBarLinesは時刻順が前提）
         barLines.Sort((a, b) => a.bar.CompareTo(b.bar));
+    }
+
+    //tick 0 から lastTick までの小節の頭のtick。拍子変更線（type "signature"）ごとに1小節の長さを変える
+    private List<float> BarStartTicks(List<ChartNoteData> chartNotes, float lastTick)
+    {
+        //拍子の区間（tick → 1小節のtick数）。tick 0は4/4（0に拍子変更線があればそれ）
+        var barTicksAt = new SortedDictionary<float, float> { [0f] = barPertick };
+        foreach (var note in chartNotes)
+        {
+            if (note.type != "signature" || note.tick < 0f || note.numerator <= 0 || note.denominator <= 0) continue;
+            barTicksAt[note.tick] = barPertick * note.numerator / note.denominator;
+        }
+
+        var starts = new List<float>();
+        var sections = new List<KeyValuePair<float, float>>(barTicksAt);
+        for (int i = 0; i < sections.Count; i++)
+        {
+            float end = i + 1 < sections.Count ? sections[i + 1].Key : float.PositiveInfinity;
+            for (float tick = sections[i].Key; tick < end - 1e-3f && tick <= lastTick + 1e-3f; tick += sections[i].Value)
+            {
+                starts.Add(tick);
+            }
+        }
+        return starts;
     }
 
     //bar: 流す位置（DisplayBarの小節数）

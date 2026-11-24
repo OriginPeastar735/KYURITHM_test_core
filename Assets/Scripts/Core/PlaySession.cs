@@ -70,6 +70,9 @@ public static class PlaySession
     public static string SongArtist;//選曲画面で選んだ曲のアーティスト名。空なら譜面jsonのmeta.artistを使う
     public static bool WaitingForIntro;//楽曲紹介の表示中。trueの間はプレイ画面の曲を再生しない
     public static int SortMode;//選曲画面のソート（MusicSelectManager.SortModeの番号）
+    //テスト譜面（StreamingAssets/Songs/test）を選曲画面に出すか。運営がオープニングでF8を押して切り替える
+    //プレイヤーの設定ではないので、EndSessionでは戻さない（ゲームを終了するとOFFに戻る）
+    public static bool TestChartsEnabled;
     public static bool HasLastSelection;//前の曲を選んだ状態（MusicIndex・Difficulty・SortMode）が残っているか。次の曲の選曲画面はその状態から始める
 
     // プレイ設定（選曲画面の設定カードで変更し、プレイ画面のNoteManager・MusicManager・GameManagerで使う）
@@ -101,5 +104,10 @@ public static class PlaySession
     public static int NoteThicknessPercent;//ノーツの太さ（奥行き）。50%がプレハブのままの太さ
     public static bool ShowFastLate;//FAST/LATEを表示するか
     public static bool ShowBarLines = true;//1小節ごとに小節線を流すか（通常はON）
-    public static bool TapSound;//タップ音（ノーツを叩いた音・空打ちの音）を鳴らすか
+    public static int TapSoundVolumePercent;//タップ音（ノーツを叩いた音・空打ちの音）の音量（0%で鳴らさない）
+    public static bool TapSound => TapSoundVolumePercent > 0;//タップ音を鳴らすか
+    public static ComboPosition ComboPosition;//コンボ数を出す位置
 }
+
+//プレイ中のコンボ数を出す位置（選曲画面の設定）
+public enum ComboPosition { Hidden, Bottom, Middle, Top }//設定の − / + で並ぶ順（+ を押すほど上へ）

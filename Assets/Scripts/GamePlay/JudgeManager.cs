@@ -22,13 +22,18 @@ public class JudgeManager : MonoBehaviour
     public static event Action<float> FastLate;
     //判定が出たときに、判定の種類とノーツの中心レーン位置を通知する（ノーツの上に判定を表示するのに使う）
     public static event Action<JudgeResult, float> Judged;
-    //タップ音用。センサーを押したフレームに、どちらか1回だけ通知する
-    public static event Action TapHit;//ノーツを叩けた（tap・slide始点がMISS以外、holdの近く、なぞっているslideの上）
+    //タップ音用。センサーを押したフレームに、どれか1回だけ通知する（tapとslide始点を同時に取ったときはTapHitとSlideStepの両方）
+    //holdの近くを押したときは何も通知しない（holdを取れた時刻にHoldHitで鳴らす）
+    public static event Action TapHit;//ノーツを叩けた（tapがMISS以外、なぞっているslideの上）
     public static event Action EmptyTap;//空打ち（どのノーツにも当たらなかった、またはMISSになった）
+    public static event Action HoldHit;//holdを取れた
+    public static event Action SlideStep;//slideの始点を叩けた、中間・終点を取れた（一定間隔の判定点では通知しない）
+    //slideをなぞっているか（タップ音の継続音に使う）
+    public bool IsTracingSlide { get; private set; }
 
     //チュートリアル用。trueの間、押した瞬間の判定（tap・slide始点）はずれに関係なくPRECISE+にする（止めて待っているノーツを押したとき）
     [NonSerialized] public bool forcePrecisePlus;
-    private bool tapHitThisFrame;//このフレームでtap・slide始点をMISS以外で取ったか
+    private bool tapHitThisFrame, slideStartHitThisFrame;//このフレームでtap・slide始点をMISS以外で取ったか
 
     //ノーツの判定猶予をここで設定（だれでも楽しめるように広めにしている）
     [Header("判定幅(ms)")]
@@ -97,9 +102,16 @@ public class JudgeManager : MonoBehaviour
         if (anyDown)
         {
             tapHitThisFrame = false;
+            slideStartHitThisFrame = false;
             JudgeTaps();
-            if (tapHitThisFrame || AnyUsefulFreePress()) TapHit?.Invoke();
-            else EmptyTap?.Invoke();
+            if (tapHitThisFrame) TapHit?.Invoke();
+            if (slideStartHitThisFrame) SlideStep?.Invoke();
+            if (!tapHitThisFrame && !slideStartHitThisFrame)
+            {
+                FreePress press = CheckFreePress();
+                if (press == FreePress.OnSlide) TapHit?.Invoke();
+                else if (press == FreePress.None) EmptyTap?.Invoke();
+            }
         }
         JudgeHolds();
         JudgeSlides();
@@ -151,7 +163,7 @@ public class JudgeManager : MonoBehaviour
             {
                 float diff = bestPressTime - bestNote.expectedTime;
                 Consume(bestNote.lane, bestNote.width);
-                ShowTimingResult(GradeByTiming(diff), bestNote.centerLane, diff);
+                if (ShowTimingResult(GradeByTiming(diff), bestNote.centerLane, diff)) tapHitThisFrame = true;
                 bestNote.Delete();
             }
             else if (bestSlide != null)
@@ -159,7 +171,7 @@ public class JudgeManager : MonoBehaviour
                 float diff = bestPressTime - bestSlide.startExpectedTime;
                 float centerLane = bestSlide.startLane + bestSlide.startWidth / 2f;
                 Consume(bestSlide.startLane, bestSlide.startWidth);
-                ShowTimingResult(GradeByTiming(diff), centerLane, diff);
+                if (ShowTimingResult(GradeByTiming(diff), centerLane, diff)) slideStartHitThisFrame = true;
                 bestSlide.Activate();
             }
             else
@@ -169,9 +181,13 @@ public class JudgeManager : MonoBehaviour
         }
     }
 
-    //tap・slide始点に使われなかった入力のうち、holdを取るための入力か、なぞっているslideの上を押した入力があるか（タップ音用）
-    bool AnyUsefulFreePress()
+    enum FreePress { None, OnHold, OnSlide }
+
+    //tap・slide始点に使われなかった入力が、holdを取るための入力か、なぞっているslideの上を押した入力か（タップ音用）
+    //holdを優先する（holdの音は取れた時刻に鳴らすので、押したときは鳴らさない）
+    FreePress CheckFreePress()
     {
+        FreePress result = FreePress.None;
         for (int i = 0; i < InputManager.LaneCount; i++)
         {
             if (!InputManager.instance.laneDown[i] || consumed[i]) continue;
@@ -180,16 +196,17 @@ public class JudgeManager : MonoBehaviour
             {
                 if (hold == null) continue;
                 if (hold.expectedTime > pressTime[i] + MissWindow) break;//時刻順なので、これ以降は判定幅より先
-                if (i >= hold.lane && i < hold.lane + hold.width && pressTime[i] - hold.expectedTime <= MissWindow) return true;
+                if (i >= hold.lane && i < hold.lane + hold.width && pressTime[i] - hold.expectedTime <= MissWindow) return FreePress.OnHold;
             }
+            if (result == FreePress.OnSlide) continue;
             foreach (LongNote ln in NoteManager.instance.LongNotes)
             {
                 if (ln == null || ln.state != LongNoteState.Holding) continue;
                 ln.GetLaneRangeAt(currentPlayTime, out float lane, out float width);
-                if (i + 1 > lane && i < lane + width) return true;
+                if (i + 1 > lane && i < lane + width) { result = FreePress.OnSlide; break; }
             }
         }
-        return false;
+        return result;
     }
 
     // ===== hold =====
@@ -209,6 +226,7 @@ public class JudgeManager : MonoBehaviour
             if (InputManager.instance.AnyHeld(hold.lane, hold.width) || TouchedSince(hold.lane, hold.width, hold.expectedTime - holdEarlyGrace))
             {
                 ShowResult(JudgeResult.PrecisePlus, hold.centerLane, diff);
+                HoldHit?.Invoke();
                 hold.Delete();
             }
             else if (diff > MissWindow)
@@ -242,6 +260,7 @@ public class JudgeManager : MonoBehaviour
     void JudgeSlides()
     {
         List<LongNote> longNotes = NoteManager.instance.LongNotes;
+        bool tracing = false;
         for (int i = longNotes.Count - 1; i >= 0; i--)
         {
             LongNote ln = longNotes[i];
@@ -256,9 +275,11 @@ public class JudgeManager : MonoBehaviour
 
             bool held = IsHoldingSlide(ln);
             if (held) ln.lastHeldTime = currentPlayTime;
+            tracing |= held;
             UpdateHoldEffect(ln, held);
             JudgeCheckpoints(ln);
         }
+        IsTracingSlide = tracing;
     }
 
     void JudgeCheckpoints(LongNote ln)
@@ -273,6 +294,8 @@ public class JudgeManager : MonoBehaviour
             {
                 //判定点の直前(猶予内)から今までに触れていた
                 ShowResult(JudgeResult.PrecisePlus, centerLane, 0);
+                //セクションの終わりの判定点は中間・終点（それより前は一定間隔の判定点）
+                if (checkpoint >= ln.endExpectedTime - 0.001f) SlideStep?.Invoke();
             }
             else if (currentPlayTime - checkpoint > slideReleaseGrace)
             {
@@ -359,12 +382,12 @@ public class JudgeManager : MonoBehaviour
         return JudgeResult.Miss;//approxMs〜missMsの範囲で押した場合
     }
 
-    //押したタイミングで判定した結果を出す。PRECISE+でもMISSでもないときはFAST/LATEも通知する
-    void ShowTimingResult(JudgeResult result, float centerLane, float diffSec)
+    //押したタイミングで判定した結果を出す。PRECISE+でもMISSでもないときはFAST/LATEも通知する。MISS以外ならtrue
+    bool ShowTimingResult(JudgeResult result, float centerLane, float diffSec)
     {
-        if (result != JudgeResult.Miss) tapHitThisFrame = true;
         ShowResult(result, centerLane, diffSec);
         if (result == JudgeResult.Precise || result == JudgeResult.Approx) FastLate?.Invoke(diffSec);
+        return result != JudgeResult.Miss;
     }
 
     //判定結果に応じてエフェクトとイベントを発行する（centerLaneはエフェクトを出すレーン位置）

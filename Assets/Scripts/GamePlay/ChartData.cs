@@ -11,6 +11,8 @@ public class ChartNoteData
     public int width;
     public float tick;
     public float bpm;//BPM変更線の値
+    public int numerator;//拍子変更線の拍子の分子（3/4 の 3）
+    public int denominator;//拍子変更線の拍子の分母（3/4 の 4）
     public List<SlideSection> sections;//slideのセクション（slideのみ）
 
     //slideの分岐。親slideの中間ノーツ(parentMidId)につながっている。

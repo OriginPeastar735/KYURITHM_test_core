@@ -18,13 +18,15 @@ public class PlayPreset
     public int noteThickness;
     public bool showFastLate;
     public int songOffset;
-    public bool tapSound;//どちらのプリセットもOFF（書かなければOFF）
+    public int tapSoundVolume = 100;//タップ音の音量(%)。どちらのプリセットも鳴らす（書かなければ100%）
+    public ComboPosition comboPosition = ComboPosition.Middle;//どちらのプリセットも真ん中（書かなければ真ん中）
 
     public static readonly PlayPreset Beginner = new PlayPreset
     {
         name = "初心者向け", description = "ゆっくり流れて見やすい設定", color = new Color(0.3f, 0.6f, 0.42f),
         hiSpeed = 3f, wall = 0, laneOpacity = 90, lineDivision = 4, lineOpacity = 50,
         backgroundBrightness = 70, keyBeam = 30, noteThickness = 100, showFastLate = false, songOffset = 0,
+        tapSoundVolume = 100, comboPosition = ComboPosition.Middle,
     };
 
     public static readonly PlayPreset Advanced = new PlayPreset
@@ -32,6 +34,7 @@ public class PlayPreset
         name = "上級者向け", description = "速く流れてノーツの間隔が詰まりにくい設定", color = new Color(0.62f, 0.3f, 0.36f),
         hiSpeed = 7f, wall = 0, laneOpacity = 90, lineDivision = 2, lineOpacity = 20,
         backgroundBrightness = 70, keyBeam = 30, noteThickness = 100, showFastLate = true, songOffset = 0,
+        tapSoundVolume = 100, comboPosition = ComboPosition.Middle,
     };
 
     //選曲画面のプリセットカードに並べる順
@@ -52,7 +55,8 @@ public class PlayPreset
             noteThickness = PlaySession.NoteThicknessPercent,
             showFastLate = PlaySession.ShowFastLate,
             songOffset = PlaySession.SongOffsetMs,
-            tapSound = PlaySession.TapSound,
+            tapSoundVolume = PlaySession.TapSoundVolumePercent,
+            comboPosition = PlaySession.ComboPosition,
         };
     }
 
@@ -68,7 +72,8 @@ public class PlayPreset
         PlaySession.NoteThicknessPercent = noteThickness;
         PlaySession.ShowFastLate = showFastLate;
         PlaySession.SongOffsetMs = songOffset;
-        PlaySession.TapSound = tapSound;
+        PlaySession.TapSoundVolumePercent = tapSoundVolume;
+        PlaySession.ComboPosition = comboPosition;
     }
 
     //今の設定と同じプリセット。どれとも違えば（適用した後に設定を変えたら）null
@@ -86,5 +91,6 @@ public class PlayPreset
         && PlaySession.NoteThicknessPercent == noteThickness
         && PlaySession.ShowFastLate == showFastLate
         && PlaySession.SongOffsetMs == songOffset
-        && PlaySession.TapSound == tapSound;
+        && PlaySession.TapSoundVolumePercent == tapSoundVolume
+        && PlaySession.ComboPosition == comboPosition;
 }

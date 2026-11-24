@@ -7,6 +7,7 @@ using UnityEngine.UI;
 //プレイ画面の進行。譜面の読み込みを始め、判定を受けてスコア・コンボを集計し、曲が終わったらリザルトを出す
 public class GameManager : MonoBehaviour
 {
+    const string ComboLabelName = "COMBO";//コンボの数字といっしょに動かす見出しのオブジェクト名（Playシーン）
     const string DefaultChartName = "test_long";//Playシーン単体で起動したときに使う確認用の譜面（約100秒、全種類のノーツ入り）
 
     public int[] PlayResult = new int[7];//(score, combo, maxCombo, precisePlus, precise, approx, miss)
@@ -30,7 +31,9 @@ public class GameManager : MonoBehaviour
     [Header("表示の調整（シーンに置いた文字を、始めるときにコードで動かす）")]
     [SerializeField] private float scoreFontScale = 1.7f;//スコアの文字の大きさ（シーンの大きさに対する倍率）
     [SerializeField] private Vector2 comboOffset = new Vector2(0f, 0.5f);//コンボ表示をシーンの位置からずらす量。yを増やすと奥（画面の上）へ動く
+    [SerializeField] private float comboPositionStep = 0.8f;//コンボ表示の設定が「上」「下」のとき、「真ん中」からずらす量（yの向き）
     [SerializeField] private float songInfoTop = 75f;//右上の曲名の、画面の上端からの距離（スコアの下に来るように）
+    [SerializeField] private float songInfoWidth = 640f;//右上の曲名の板の横幅
     private GameObject songInfo;//右上の曲名・難易度（リザルトが出たら隠す）
 
     [Header("FAST/LATE表示（選曲画面の設定がONのときだけ、コンボ表示を複製して作る）")]
@@ -59,14 +62,23 @@ public class GameManager : MonoBehaviour
             StartChart();
         }
 
-        //スコアを大きく、コンボを少し上へ（FAST/LATE表示はコンボ表示の位置を基準に作るので、その前に動かす）
+        //スコアを大きく、コンボを設定の位置へ（FAST/LATE表示はコンボ表示の位置を基準に作るので、その前に動かす）
         ScoreText.fontSize *= scoreFontScale;
         ScoreText.textWrappingMode = TextWrappingModes.NoWrap;
         ScoreText.overflowMode = TextOverflowModes.Overflow;
-        ComboText.rectTransform.anchoredPosition += comboOffset;
+        RectTransform comboLabel = FindComboLabel();
+        Vector2 offset = comboOffset + ComboPositionShift();
+        ComboText.rectTransform.anchoredPosition += offset;
+        if (comboLabel != null) comboLabel.anchoredPosition += offset;
         if (!isTutorial) BuildSongInfo();
 
         if (PlaySession.ShowFastLate) FastLateDisplay.Create(ComboText, fastLateOffset, fastLateFontSize);
+        //「表示しない」でもFAST/LATEは出すので、複製し終えてから隠す
+        if (PlaySession.ComboPosition == ComboPosition.Hidden)
+        {
+            ComboText.gameObject.SetActive(false);
+            if (comboLabel != null) comboLabel.gameObject.SetActive(false);
+        }
         if (PlaySession.TapSound) TapSound.Create();
         JudgeTextDisplay.Create(ComboText.font);
         ApplyBackgroundBrightness();
@@ -87,6 +99,26 @@ public class GameManager : MonoBehaviour
         MusicManager.instance.SetStartDelay(notes.TravelSeconds + notes.LeadInSeconds);
     }
 
+    //コンボの数字の上にある「COMBO」の文字（シーンでは数字と同じ親の別オブジェクト）。数字と一緒に動かす・隠す
+    RectTransform FindComboLabel()
+    {
+        Transform parent = ComboText.rectTransform.parent;
+        Transform label = parent != null ? parent.Find(ComboLabelName) : null;
+        if (label == null) Debug.LogWarning($"コンボの見出し「{ComboLabelName}」が見つからないので、数字だけ動かす");
+        return label as RectTransform;
+    }
+
+    //選曲画面の「コンボ表示」の設定で、真ん中からずらす量
+    Vector2 ComboPositionShift()
+    {
+        switch (PlaySession.ComboPosition)
+        {
+            case ComboPosition.Top: return new Vector2(0f, comboPositionStep);
+            case ComboPosition.Bottom: return new Vector2(0f, -comboPositionStep);
+            default: return Vector2.zero;
+        }
+    }
+
     //遊んでいる曲名と難易度を、画面の右上（スコアの下）に出す
     //シーンには置かず、ほかの画面と同じくUIUtilで作る（曲名は日本語なのでWindowsのフォントを使う）
     void BuildSongInfo()
@@ -100,16 +132,38 @@ public class GameManager : MonoBehaviour
         Font font = UIUtil.CreateFont();
         Vector2 topRight = Vector2.one;
 
-        Text titleText = UIUtil.CreateText("Title", canvas, font, Color.white, title, 34, TextAnchor.MiddleRight, FontStyle.Bold);
-        UIUtil.Place(titleText.rectTransform, topRight, topRight, topRight, new Vector2(-30f, -songInfoTop), new Vector2(1000f, 44f));
+        //選曲画面を通らずに起動したときは難易度が分からないので、曲名だけ出す
+        int difficulty = Mathf.Clamp(PlaySession.Difficulty, 0, DifficultyInfo.Names.Length - 1);
+        Color accent = fromSelect ? DifficultyInfo.Colors[difficulty] : new Color(0.6f, 0.6f, 0.6f);
+        const float titleHeight = 60f, badgeHeight = 44f, padding = 14f;
+        float height = padding + titleHeight + (fromSelect ? badgeHeight + 8f : 0f) + padding;
+
+        //背景の上でも読めるよう、暗い板の上に載せて周りと区切る（左端の色は難易度の色）
+        var panel = UIUtil.CreateImage("Panel", canvas, new Color(0.03f, 0.04f, 0.09f, 0.85f)).rectTransform;
+        UIUtil.Place(panel, topRight, topRight, topRight, new Vector2(-24f, -songInfoTop), new Vector2(songInfoWidth, height));
+        var outline = panel.gameObject.AddComponent<Outline>();//板の縁取り
+        outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.8f);
+        outline.effectDistance = new Vector2(2f, -2f);
+        var strip = UIUtil.CreateImage("Strip", panel, accent).rectTransform;
+        UIUtil.Place(strip, Vector2.zero, new Vector2(0f, 1f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(12f, 0f));
+
+        //長い曲名は板に収まるまで文字を小さくする
+        Text titleText = UIUtil.CreateText("Title", panel, font, Color.white, title, 46, TextAnchor.MiddleRight, FontStyle.Bold);
+        titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        titleText.verticalOverflow = VerticalWrapMode.Truncate;
+        titleText.resizeTextForBestFit = true;
+        titleText.resizeTextMinSize = 24;
+        titleText.resizeTextMaxSize = 46;
+        UIUtil.Place(titleText.rectTransform, new Vector2(0f, 1f), Vector2.one, topRight, new Vector2(-20f, -padding), new Vector2(-52f, titleHeight));
         AddShadow(titleText);
 
-        //選曲画面を通らずに起動したときは難易度が分からないので、曲名だけ出す
         if (!fromSelect) return;
-        int difficulty = Mathf.Clamp(PlaySession.Difficulty, 0, DifficultyInfo.Names.Length - 1);
-        Text difficultyText = UIUtil.CreateText("Difficulty", canvas, font, DifficultyInfo.Colors[difficulty],
-            $"{DifficultyInfo.Names[difficulty]}  Lv.{PlaySession.SongLevel}", 28, TextAnchor.MiddleRight, FontStyle.Bold);
-        UIUtil.Place(difficultyText.rectTransform, topRight, topRight, topRight, new Vector2(-30f, -songInfoTop - 46f), new Vector2(1000f, 38f));
+        //難易度とレベルは、難易度の色の札にして右下に出す
+        var badge = UIUtil.CreateImage("DifficultyBadge", panel, accent).rectTransform;
+        UIUtil.Place(badge, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-20f, padding), new Vector2(300f, badgeHeight));
+        Text difficultyText = UIUtil.CreateText("Difficulty", badge, font, Color.white,
+            $"{DifficultyInfo.Names[difficulty]}  Lv.{PlaySession.SongLevel}", 32, TextAnchor.MiddleCenter, FontStyle.Bold);
+        UIUtil.Stretch(difficultyText.rectTransform);
         AddShadow(difficultyText);
     }
 

@@ -21,6 +21,9 @@ public enum SelectZone
 //  SelectSong（楽曲選択）  --決定-->  Confirm（楽曲カード / プリセットカード / 設定カード）  --設定カードで決定-->  Settings（各種設定カード）
 //                         <--戻る--                                                         <--戻る・決定--
 //  ConfirmでSTARTを押すとプレイ画面へ。左斜面（ソート切り替え）はConfirm・Settingsでは戻るボタンになる
+//  楽曲選択には、テスト譜面がON（オープニングでF8）のとき、ランダム選曲カードの左に「テスト譜面」カードが出る
+//  決定するとテスト譜面だけの楽曲選択（testMode）に移り、最後の「戻る」カードで普通の楽曲選択に戻る
+//  テスト譜面はランダム選曲・時間切れの自動選曲では選ばれない
 //  プリセットカードで決定すると、その右に初心者向け・上級者向けのカードが開く（もう一度押すと閉じる）。開いたカードで決定するとその設定をまとめて適用する
 public class MusicSelectManager : MonoBehaviour
 {
@@ -77,7 +80,9 @@ public class MusicSelectManager : MonoBehaviour
         public string plusLabel = "+";
     }
 
-    private List<SongData> songs;
+    private List<SongData> songs;//普通の曲とテスト譜面の曲（SongData.isTestで区別する）
+    private bool testMode;//テスト譜面の楽曲選択を開いているか
+    private bool hasTestSongs;
     private List<int> order = new List<int>();//今の難易度がある曲だけをソートした並び（songsのインデックス）
     private SortMode sortMode = SortMode.LevelAsc;
     private int difficulty = 0;//選んでいる難易度。最初はどれかの曲にある一番低い難易度
@@ -124,6 +129,12 @@ public class MusicSelectManager : MonoBehaviour
             Debug.Log("StreamingAssets/Songs に曲が無いので、仮の曲を表示します");
             songs = PlaceholderSongs.Create();
         }
+        if (PlaySession.TestChartsEnabled)
+        {
+            songs = new List<SongData>(songs);//SongLibraryのリストは変えない
+            songs.AddRange(SongLibrary.LoadTest());
+        }
+        hasTestSongs = songs.Exists(s => s.isTest);
         ApplyHighScores();
         difficulty = FindDifficulty(-1, 1);
         if (PlaySession.HasLastSelection) RestoreLastSelection();
@@ -153,7 +164,7 @@ public class MusicSelectManager : MonoBehaviour
             view.SetTimer(Mathf.Max(0, Mathf.CeilToInt(remainingTime)));
             if (remainingTime <= 0)
             {
-                StartGame();//時間切れになったら選んでいる曲でスタート
+                StartGame(true);//時間切れになったら選んでいる曲でスタート（テスト譜面・曲以外のカードなら普通の曲から抽選）
             }
             else if (Time.time >= inputLockUntil && !view.IsTransitioning)//画面切り替えのアニメーション中は操作できない
             {
@@ -211,7 +222,35 @@ public class MusicSelectManager : MonoBehaviour
         HandleMove();
         if (Pressed(SelectZone.DiffDown)) TrySwitch(() => ChangeDifficulty(-1));
         if (Pressed(SelectZone.DiffUp)) TrySwitch(() => ChangeDifficulty(1));
-        if (Pressed(SelectZone.Decide)) TrySwitch(() => EnterConfirm(0));
+        if (Pressed(SelectZone.Decide)) TrySwitch(DecideSelectCard);
+    }
+
+    //楽曲選択で決定したとき。カードの種類で動きを変える
+    void DecideSelectCard()
+    {
+        switch (CardKind(SelectIndex(position)))
+        {
+            case SelectCard.TestEntry: SetTestMode(true); break;
+            case SelectCard.Back: SetTestMode(false); break;
+            default: EnterConfirm(0); break;
+        }
+    }
+
+    //テスト譜面の楽曲選択と普通の楽曲選択を切り替える（設定画面と同じアニメーション。入るときは進む向き）
+    //今の難易度の譜面が無ければ、選べる一番低い難易度にする
+    void SetTestMode(bool test)
+    {
+        CloseSortPopup();
+        view.Transition(test, () =>
+        {
+            testMode = test;
+            if (!IsSelectableDifficulty(difficulty)) difficulty = FindDifficulty(-1, 1);
+            ApplySort();
+            position = test ? 0 : order.Count;//入るときは最初の曲、戻るときは「テスト譜面」カード
+            view.Snap(position);
+            RefreshInfo();
+            StopRepeat();
+        });
     }
 
     //カード0: 楽曲カード（STARTでプレイ開始） カード1: プリセットカード（決定で初心者向け・上級者向けを開閉）
@@ -329,7 +368,7 @@ public class MusicSelectManager : MonoBehaviour
         return next >= 0 && next < ItemCount;
     }
 
-    int ItemCount => phase == Phase.Confirm ? SettingsPosition + 1 : phase == Phase.Settings ? settings.Count : order.Count + 1;
+    int ItemCount => phase == Phase.Confirm ? SettingsPosition + 1 : phase == Phase.Settings ? settings.Count : SelectCardCount;
 
     // ===== 画面の切り替え =====
     void EnterConfirm(int focus)
@@ -339,7 +378,7 @@ public class MusicSelectManager : MonoBehaviour
         if (forward)
         {
             songPosition = position;
-            chosenByRandom = SelectIndex(position) == order.Count;
+            chosenByRandom = CardKind(SelectIndex(position)) == SelectCard.Random;
             chosenSong = SelectedSong();
             presetsOpen = false;//曲を選び直したらプリセットは閉じた状態から
         }
@@ -384,7 +423,7 @@ public class MusicSelectManager : MonoBehaviour
         if (IsSelectableDifficulty(PlaySession.Difficulty)) difficulty = PlaySession.Difficulty;
         ApplySort();
         int index = order.FindIndex(i => songs[i].id == PlaySession.MusicIndex);
-        if (index >= 0) position = index;
+        if (index >= 0) position = index;//テスト譜面の曲だった場合は見つからないので、普通の楽曲選択の最初から
     }
 
     //試聴で流す曲の音源。流さないときはnull
@@ -395,7 +434,7 @@ public class MusicSelectManager : MonoBehaviour
         if (phase != Phase.SelectSong) return chosenByRandom ? null : chosenSong.audioPath;
         if (held[(int)SelectZone.Left] || held[(int)SelectZone.Right]) return null;
         int index = SelectIndex(position);
-        return index == order.Count ? null : songs[order[index]].audioPath;
+        return CardKind(index) == SelectCard.Song ? songs[order[index]].audioPath : null;
     }
 
     //プレイ画面で記録したハイスコアを曲リストに反映する（記録の無い譜面は読み込んだときの値のまま）
@@ -415,11 +454,15 @@ public class MusicSelectManager : MonoBehaviour
     }
 
     //楽曲紹介画面を出してからプレイ画面へ
-    void StartGame()
+    //timeUp: 時間切れで始めるとき。選んでいるのがテスト譜面・曲以外のカードなら、普通の曲から抽選する
+    void StartGame() => StartGame(false);
+
+    void StartGame(bool timeUp)
     {
         if (started) return;
         started = true;
         SongData song = phase == Phase.SelectSong ? SelectedSong() : chosenSong;
+        if (song == null || (timeUp && song.isTest)) song = RandomNormalSong();
         PlaySession.MusicIndex = song.id;
         PlaySession.Difficulty = difficulty;
         PlaySession.ChartName = song.difficulties[difficulty].chartName;
@@ -449,7 +492,7 @@ public class MusicSelectManager : MonoBehaviour
         view.SetZoneLabel(SelectZone.SortNext, selecting ? "→" : "");
         view.SetZoneLabel(SelectZone.Left, "← 左");
         view.SetZoneLabel(SelectZone.Right, "右 →");
-        view.SetZoneLabel(SelectZone.Decide, selecting ? "決定" : phase == Phase.Settings ? "OK" : ConfirmDecideLabel());
+        view.SetZoneLabel(SelectZone.Decide, selecting ? SelectDecideLabel() : phase == Phase.Settings ? "OK" : ConfirmDecideLabel());
         view.SetSlopeTitle(false, phase == Phase.Settings ? "設定変更" : "難易度切り替え");
         SettingItem setting = phase == Phase.Settings ? settings[position] : null;
         view.SetZoneLabel(SelectZone.DiffDown, setting != null ? setting.minusLabel : "−");
@@ -466,6 +509,16 @@ public class MusicSelectManager : MonoBehaviour
         {
             bool lit = held[z] || (backHeld && (z == (int)SelectZone.SortPrev || z == (int)SelectZone.SortNext));
             view.SetZoneLit((SelectZone)z, lit && !started);
+        }
+    }
+
+    string SelectDecideLabel()
+    {
+        switch (CardKind(SelectIndex(position)))
+        {
+            case SelectCard.TestEntry: return "移動";
+            case SelectCard.Back: return "戻る";
+            default: return "決定";
         }
     }
 
@@ -490,7 +543,7 @@ public class MusicSelectManager : MonoBehaviour
         if (phase == Phase.Confirm) return chosenSong.HasDifficulty(d);
         foreach (var song in songs)
         {
-            if (song.HasDifficulty(d)) return true;
+            if (song.isTest == testMode && song.HasDifficulty(d)) return true;
         }
         return false;
     }
@@ -510,7 +563,7 @@ public class MusicSelectManager : MonoBehaviour
     {
         switch (phase)
         {
-            case Phase.SelectSong: view.SetInfo(""); break;
+            case Phase.SelectSong: view.SetInfo(testMode ? "テスト譜面" : ""); break;
             case Phase.Confirm: view.SetInfo("楽曲確認"); break;
             case Phase.Settings: view.SetInfo("プレイ設定"); break;
         }
@@ -567,14 +620,14 @@ public class MusicSelectManager : MonoBehaviour
     }
 
     //並び替えたあとの、keepPositionで選んでいた曲の位置を返す
-    //ランダム選曲カードはランダム選曲カードのまま。選んでいた曲が新しい並びに無い場合（その難易度が無い曲）は、元の並びでその次にある曲を選ぶ
+    //ランダム選曲カードなど曲以外のカードはそのカードのまま。選んでいた曲が新しい並びに無い場合（その難易度が無い曲）は、元の並びでその次にある曲を選ぶ
     int Resort(int keepPosition)
     {
         var oldOrder = new List<int>(order);
-        int oldIndex = Mod(keepPosition, oldOrder.Count + 1);
+        int oldIndex = Mod(keepPosition, SelectCardCount);
         ApplySort();
 
-        if (oldIndex == oldOrder.Count) return order.Count;
+        if (oldIndex >= oldOrder.Count) return order.Count + (oldIndex - oldOrder.Count);
         for (int i = 0; i < oldOrder.Count; i++)
         {
             int index = order.IndexOf(oldOrder[(oldIndex + i) % oldOrder.Count]);
@@ -588,7 +641,7 @@ public class MusicSelectManager : MonoBehaviour
         order.Clear();
         for (int i = 0; i < songs.Count; i++)
         {
-            if (songs[i].HasDifficulty(difficulty)) order.Add(i);
+            if (songs[i].isTest == testMode && songs[i].HasDifficulty(difficulty)) order.Add(i);
         }
 
         order.Sort((a, b) =>
@@ -679,15 +732,28 @@ public class MusicSelectManager : MonoBehaviour
             new SettingItem
             {
                 name = "タップ音",
-                description = "叩いたときに音を鳴らす（少し遅れて聞こえることがある）",
-                value = () => PlaySession.TapSound ? "ON" : "OFF",
-                canChange = d => d < 0 ? PlaySession.TapSound : !PlaySession.TapSound,
-                change = d => PlaySession.TapSound = d > 0,
-                minusLabel = "OFF",
-                plusLabel = "ON",
+                description = "叩いたときに鳴らす音の大きさ（0%で鳴らさない。少し遅れて聞こえることがある）",
+                value = () => PlaySession.TapSound ? $"{PlaySession.TapSoundVolumePercent}%" : "OFF",
+                canChange = d => d < 0 ? PlaySession.TapSoundVolumePercent > 0 : PlaySession.TapSoundVolumePercent < 100,
+                change = d => PlaySession.TapSoundVolumePercent = Mathf.Clamp(PlaySession.TapSoundVolumePercent + d * 10, 0, 100),
+            },
+            new SettingItem
+            {
+                name = "コンボ表示",
+                description = "プレイ中のコンボ数を出す位置",
+                value = () => comboPositionNames[(int)PlaySession.ComboPosition],
+                canChange = d =>
+                {
+                    int next = (int)PlaySession.ComboPosition + d;
+                    return next >= 0 && next < comboPositionNames.Length;
+                },
+                change = d => PlaySession.ComboPosition = (ComboPosition)((int)PlaySession.ComboPosition + d),
             },
         };
     }
+
+    //コンボ表示の設定に出す名前（ComboPositionの順）
+    static readonly string[] comboPositionNames = { "表示しない", "下", "真ん中", "上" };
 
     //分割線の設定で選べるレーン数。+を押すほど細かくなる（0はなし）
     static readonly int[] lineDivisions = { 0, 8, 4, 2, 1 };
@@ -741,7 +807,13 @@ public class MusicSelectManager : MonoBehaviour
                 return p >= 0 && p < settings.Count ? SettingItemCard(settings[p]) : null;
             default:
                 int index = SelectIndex(p);
-                return index == order.Count ? RandomCard() : CardInfo.FromSong(songs[order[index]], difficulty);
+                switch (CardKind(index))
+                {
+                    case SelectCard.TestEntry: return TestEntryCard();
+                    case SelectCard.Back: return BackCard();
+                    case SelectCard.Random: return RandomCard();
+                    default: return CardInfo.FromSong(songs[order[index]], difficulty);
+                }
         }
     }
 
@@ -758,6 +830,44 @@ public class MusicSelectManager : MonoBehaviour
             title = "ランダム選曲",
             titleSize = 48,
             titleInBottomCenter = true,
+        };
+    }
+
+    static readonly Color testColor = new Color(0.45f, 0.32f, 0.55f);
+
+    //テスト譜面の楽曲選択に移るカード
+    CardInfo TestEntryCard()
+    {
+        return new CardInfo
+        {
+            background = testColor,
+            topSmall = "TEST",
+            topLarge = "テスト譜面",
+            squareColor = Color.Lerp(testColor, Color.black, 0.4f),
+            squareText = "TEST",
+            squareTextSize = 120,
+            title = "テスト譜面",
+            titleSize = 40,
+            subtitle = "決定でテスト譜面の一覧へ",
+            subtitleSize = 26,
+        };
+    }
+
+    //テスト譜面の楽曲選択から普通の楽曲選択に戻るカード
+    CardInfo BackCard()
+    {
+        return new CardInfo
+        {
+            background = testColor,
+            topSmall = "TEST",
+            topLarge = "戻る",
+            squareColor = Color.Lerp(testColor, Color.black, 0.4f),
+            squareText = "←",
+            squareTextSize = 200,
+            title = "通常の楽曲選択に戻る",
+            titleSize = 34,
+            subtitle = "決定で戻る",
+            subtitleSize = 26,
         };
     }
 
@@ -816,7 +926,8 @@ public class MusicSelectManager : MonoBehaviour
             $"キービーム {preset.keyBeam}%\n" +
             $"ノーツの太さ {preset.noteThickness}%\n" +
             $"FAST/LATE {(preset.showFastLate ? "ON" : "OFF")}\n" +
-            $"タップ音 {(preset.tapSound ? "ON" : "OFF")}\n" +
+            $"タップ音 {(preset.tapSoundVolume > 0 ? $"{preset.tapSoundVolume}%" : "OFF")}\n" +
+            $"コンボ表示 {comboPositionNames[(int)preset.comboPosition]}\n" +
             $"楽曲タイミング {preset.songOffset:+0;-0;0}ms";
         return new CardInfo
         {
@@ -825,7 +936,7 @@ public class MusicSelectManager : MonoBehaviour
             topLarge = preset.name,
             squareColor = Color.Lerp(preset.color, Color.black, 0.45f),
             squareText = values,
-            squareTextSize = 30,
+            squareTextSize = 27,
             title = preset.description,
             titleSize = 28,
             subtitle = preset.IsApplied ? "適用中" : "決定で適用",
@@ -852,18 +963,51 @@ public class MusicSelectManager : MonoBehaviour
         };
     }
 
-    //楽曲選択の位置pが何番目のカードか（左右に何周しても同じ並びが繰り返される）。order.Countならランダム選曲カード
-    int SelectIndex(int p)
+    // ===== 楽曲選択のカードの並び =====
+    //普通の楽曲選択:       order の曲 → （テスト譜面がONなら）テスト譜面カード → ランダム選曲カード
+    //テスト譜面の楽曲選択: order の曲（テスト譜面だけ） → 戻るカード
+    enum SelectCard { Song, TestEntry, Random, Back }
+
+    bool ShowTestEntry => !testMode && hasTestSongs;
+    int SelectCardCount => order.Count + (ShowTestEntry ? 2 : 1);
+
+    SelectCard CardKind(int index)
     {
-        return Mod(p, order.Count + 1);
+        if (index < order.Count) return SelectCard.Song;
+        if (testMode) return SelectCard.Back;
+        return ShowTestEntry && index == order.Count ? SelectCard.TestEntry : SelectCard.Random;
     }
 
-    //楽曲選択で選んでいる曲。ランダム選曲カードならここで抽選する
+    //楽曲選択の位置pが何番目のカードか（左右に何周しても同じ並びが繰り返される）
+    int SelectIndex(int p)
+    {
+        return Mod(p, SelectCardCount);
+    }
+
+    //楽曲選択で選んでいる曲。ランダム選曲カードならここで抽選する。曲以外のカード（テスト譜面・戻る）ならnull
     SongData SelectedSong()
     {
         int index = SelectIndex(position);
-        if (index == order.Count) index = UnityEngine.Random.Range(0, order.Count);
-        return songs[order[index]];
+        switch (CardKind(index))
+        {
+            case SelectCard.Song: return songs[order[index]];
+            case SelectCard.Random: return order.Count > 0 ? songs[order[UnityEngine.Random.Range(0, order.Count)]] : RandomNormalSong();
+            default: return null;
+        }
+    }
+
+    //普通の曲（テスト譜面以外）から1曲抽選する。今の難易度の譜面がある曲が無ければ、抽選した曲にある一番低い難易度にする
+    SongData RandomNormalSong()
+    {
+        var candidates = songs.FindAll(s => !s.isTest && s.HasDifficulty(difficulty));
+        if (candidates.Count == 0)
+        {
+            candidates = songs.FindAll(s => !s.isTest);
+            SongData song = candidates[UnityEngine.Random.Range(0, candidates.Count)];
+            difficulty = song.difficulties.FindIndex(d => d != null);
+            return song;
+        }
+        return candidates[UnityEngine.Random.Range(0, candidates.Count)];
     }
 
     static int Mod(int a, int n)

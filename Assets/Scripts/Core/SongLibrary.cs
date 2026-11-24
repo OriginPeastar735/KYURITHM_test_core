@@ -13,9 +13,16 @@ using UnityEngine;
 //
 //曲名・作曲者・難易度などは譜面のmetaから読むので、曲の情報を書いたファイルは別に作らない
 //曲フォルダの中身はGoogle Driveで管理していて、gitには入れない（.gitignore）
+//
+//  StreamingAssets/Songs/test/<曲フォルダ>/ はテスト譜面（作りかけの譜面や試験的な機能を使う譜面）
+//      曲フォルダの中身は普通の曲と同じ。普通の曲の一覧には入れず、LoadTestで別に読む
 public static class SongLibrary
 {
     public static string SongsRoot => Path.Combine(Application.streamingAssetsPath, "Songs");
+    public const string TestFolderName = "test";
+    public static string TestSongsRoot => Path.Combine(SongsRoot, TestFolderName);
+    const int TestIdOffset = 100000;//テスト譜面の曲のid。普通の曲のidと重ならないようにする
+    const string TestChartIdPrefix = "test:";//テスト譜面のスコアが普通の曲の記録と混ざらないよう、譜面の目印の頭に付ける
 
     static readonly string[] imageExtensions = { ".png", ".jpg", ".jpeg" };
     static readonly Dictionary<string, Sprite> jacketCache = new Dictionary<string, Sprite>();
@@ -36,35 +43,58 @@ public static class SongLibrary
         public string audioFileName;
     }
 
-    //LoadAllで読み込んだ曲リスト。曲フォルダは起動中に変わらないので、2回目以降はこれを返す
-    static List<SongData> cachedSongs;
+    //LoadAll・LoadTestで読み込んだ曲リスト。曲フォルダは起動中に変わらないので、2回目以降はこれを返す
+    static List<SongData> cachedSongs, cachedTestSongs;
 
     //エディタで「ドメインのリロード」を切っていても、再生を始めるたびに曲フォルダを読み直す
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ClearCache()
     {
         cachedSongs = null;
+        cachedTestSongs = null;
     }
 
-    //すべての曲フォルダを読み込む。曲が1つも無ければ空のリストを返す
+    //普通の曲フォルダ（testフォルダ以外）をすべて読み込む。曲が1つも無ければ空のリストを返す
     //選曲画面を開くたびに呼ばれるので、読み込むのは最初の1回だけにする（返すリストは毎回同じもの）
     public static List<SongData> LoadAll()
     {
         if (cachedSongs != null) return cachedSongs;
+        cachedSongs = LoadFolder(SongsRoot, false);
+        Debug.Log($"StreamingAssets/Songs から {cachedSongs.Count} 曲を読み込みました");
+        return cachedSongs;
+    }
 
+    //テスト譜面（Songs/test の中の曲フォルダ）をすべて読み込む
+    public static List<SongData> LoadTest()
+    {
+        if (cachedTestSongs != null) return cachedTestSongs;
+        cachedTestSongs = LoadFolder(TestSongsRoot, true);
+        if (cachedTestSongs.Count > 0) Debug.Log($"StreamingAssets/Songs/{TestFolderName} から テスト譜面 {cachedTestSongs.Count} 曲を読み込みました");
+        return cachedTestSongs;
+    }
+
+    static List<SongData> LoadFolder(string root, bool isTest)
+    {
         var songs = new List<SongData>();
-        if (Directory.Exists(SongsRoot))
+        if (!Directory.Exists(root)) return songs;
+
+        string[] folders = Directory.GetDirectories(root);
+        Array.Sort(folders, StringComparer.Ordinal);//PCによって順番が変わらないように
+        foreach (string folder in folders)
         {
-            string[] folders = Directory.GetDirectories(SongsRoot);
-            Array.Sort(folders, StringComparer.Ordinal);//PCによって順番が変わらないように
-            foreach (string folder in folders)
+            if (!isTest && Path.GetFileName(folder).Equals(TestFolderName, StringComparison.OrdinalIgnoreCase)) continue;
+            SongData song = LoadSong(folder, (isTest ? TestIdOffset : 0) + songs.Count);
+            if (song == null) continue;
+            if (isTest)
             {
-                SongData song = LoadSong(folder, songs.Count);
-                if (song != null) songs.Add(song);
+                song.isTest = true;
+                foreach (var chart in song.difficulties)
+                {
+                    if (chart != null) chart.chartId = TestChartIdPrefix + chart.chartId;
+                }
             }
-            Debug.Log($"StreamingAssets/Songs から {songs.Count} 曲を読み込みました");
+            songs.Add(song);
         }
-        cachedSongs = songs;
         return songs;
     }
 

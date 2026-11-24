@@ -135,6 +135,13 @@ public class OpeningScreen : MonoBehaviour
             DisplayFit.OpenSetup();
             return;
         }
+        //F8でテスト譜面（StreamingAssets/Songs/test）を選曲画面に出すかを切り替える
+        if (Input.GetKeyDown(KeyCode.F8))
+        {
+            PlaySession.TestChartsEnabled = !PlaySession.TestChartsEnabled;
+            Notice.Show($"テスト譜面: {(PlaySession.TestChartsEnabled ? "ON（選曲画面のランダム選曲の左に出ます）" : "OFF")}");
+            return;
+        }
         if (Time.time - startTime >= inputLockSeconds && AnyPressed()) Ask();
     }
 
