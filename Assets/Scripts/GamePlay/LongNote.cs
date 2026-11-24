@@ -45,7 +45,8 @@ public class LongNote : MonoBehaviour
     [Header("Section")]
     public bool isFirstSection = true;//slideの最初のセクションか（始点をタップで判定する）。分岐の接続点から始まる場合はfalse
     public bool isLastSection = true;//slideの最後のセクションか
-    private bool showEndNote = true;//終点ノーツを表示するか（分岐の終点が親の中間ノーツにつながる場合はfalse）
+    private bool showEndNote = true;//終点ノーツを表示するか（分岐の終点が親の中間ノーツにつながる場合と、判定なしの中間はfalse）
+    public bool EndIsJudged => showEndNote;//終点（中間）を取ったときに音を鳴らすか。表示しない終点には判定も音もない
 
     [HideInInspector] public List<float> checkpointTimes = new List<float>();//slide中の判定点の時刻
     [HideInInspector] public int nextCheckpoint = 0;//次に判定する判定点の番号

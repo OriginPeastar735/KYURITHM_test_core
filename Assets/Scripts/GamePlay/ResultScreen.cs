@@ -28,6 +28,7 @@ public class ResultScreen : MonoBehaviour
     [SerializeField] private TextMeshProUGUI missText;
     [SerializeField] private TextMeshProUGUI highScoreText;//未設定ならscoreTextを複製してその下に作る
     [SerializeField] private TextMeshProUGUI rankText;//スコアのランク（ScoreRank）。数え上げが終わってから出す
+    [SerializeField] private float autoBackSeconds = 20f;//リザルトを出してからこの秒数で、触れなくても次へ進む
 
     [Header("ハイスコア表示（highScoreTextが未設定のときに作るテキスト）")]
     [SerializeField] private Vector2 highScoreOffset = new Vector2(0f, -70f);//scoreTextからの位置
@@ -69,6 +70,7 @@ public class ResultScreen : MonoBehaviour
     IEnumerator Run(int[] result, int? previousBest, GameObject hideOnShow)
     {
         yield return new WaitForSeconds(delay);
+        float shownTime = Time.time;//自動で次へ進むまでの時間を数え始める
 
         if (hideOnShow != null) hideOnShow.SetActive(false);
         IsShowing = true;
@@ -98,7 +100,8 @@ public class ResultScreen : MonoBehaviour
         if (rankText != null) rankText.text = ScoreRank.Get(result[0]);
 
         //5. 押した瞬間だけを見るので、プレイ中から押しっぱなしのレーンやキーでは戻らない
-        while (!BackPressed()) yield return null;
+        //触れなくてもautoBackSeconds秒で次へ進む
+        while (!BackPressed() && Time.time - shownTime < autoBackSeconds) yield return null;
         SceneLoader.ChangeScene(PlaySession.NextTrack() ? GameScene.MusicSelect : GameScene.Result);
     }
 
@@ -107,7 +110,7 @@ public class ResultScreen : MonoBehaviour
     {
         if (!previousBest.HasValue || score > previousBest.Value)
         {
-            highScoreText.text = $"NEW RECORD (+{score - previousBest.GetValueOrDefault():N0})";
+            highScoreText.text = $"NEW RECORD! (+{score - previousBest.GetValueOrDefault():N0})";
         }
         else
         {
@@ -127,8 +130,7 @@ public class ResultScreen : MonoBehaviour
 
     bool BackPressed()
     {
-        if (InputManager.instance != null && InputManager.instance.AnyDown(0, InputManager.LaneCount)) return true;
-        return Input.anyKeyDown;
+        return InputManager.AnyPressed();//レーンかキーを押した瞬間だけ（ファンクションキーでは進まない）
     }
 
     //曲名とアーティスト名は選曲画面で選んだ曲のものを使う

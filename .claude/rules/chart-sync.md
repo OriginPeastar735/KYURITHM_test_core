@@ -12,6 +12,7 @@ paths:
 
 - 総ノーツ数の数え方（エディタの `getNoteCounts` → `meta.totalNotes`。ゲームは `NoteManager` で自分の数え方と比べて警告を出す）
 - スライドの判定間隔（その位置の BPM で決まる）・曲がり方（直線・内曲がり・外曲がり）・分岐
+- 判定なしの中間（`noJudge`。表示・判定・音・ノーツ数なし。一定間隔の判定点を数え直さない。エディタの `getSlideJudgePoints` とゲームの `NoteManager.SlideCheckpointTicks`）
 - スライドの判定点の位置（エディタの `JUDGE` コマンド = `formatSlideJudgeReport`）
 - BPM 変更の扱い（ノーツが来る秒だけが変わり、流れる速さは一定）
 - 拍子変更の扱い（線の位置から新しい小節が始まる。小節線の位置だけが変わる。エディタの `forEachBar` とゲームの `NoteManager.BarStartTicks`）

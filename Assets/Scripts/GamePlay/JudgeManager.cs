@@ -295,7 +295,8 @@ public class JudgeManager : MonoBehaviour
                 //判定点の直前(猶予内)から今までに触れていた
                 ShowResult(JudgeResult.PrecisePlus, centerLane, 0);
                 //セクションの終わりの判定点は中間・終点（それより前は一定間隔の判定点）
-                if (checkpoint >= ln.endExpectedTime - 0.001f) SlideStep?.Invoke();
+                //判定なしの中間と同じ位置に来た一定間隔の判定点では鳴らさない
+                if (ln.EndIsJudged && checkpoint >= ln.endExpectedTime - 0.001f) SlideStep?.Invoke();
             }
             else if (currentPlayTime - checkpoint > slideReleaseGrace)
             {

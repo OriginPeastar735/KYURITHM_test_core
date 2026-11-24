@@ -377,7 +377,7 @@ public class NoteManager : MonoBehaviour
     }
 
     //slideはセクションごとに1つのLongNoteとして生成する。戻り値は判定の回数
-    //ノーツ数 = 始点 + 中間 + 一定間隔判定 + 終点（エディタのSPEC SLIDEと同じ数え方）
+    //ノーツ数 = 始点 + 中間（判定なしの中間は数えない） + 一定間隔判定 + 終点（エディタのSPEC SLIDEと同じ数え方）
     //countOnly: 数えるだけで生成しない
     private int CreateSlide(ChartNoteData note, bool countOnly)
     {
@@ -394,16 +394,28 @@ public class NoteManager : MonoBehaviour
         bool startIsShared = isBranch && note.branchType == "end";
         bool endIsShared = isBranch && note.branchType == "start";
 
-        int count = startIsShared ? 0 : 1;//始点のタップ判定
+        //判定点はslide全体で決めてから、各セクションに振り分ける（判定なしの中間をまたいで間隔が続くため）
+        List<float> checkpointTicks = SlideCheckpointTicks(sections, !endIsShared);
+        int count = (startIsShared ? 0 : 1) + checkpointTicks.Count;//始点のタップ判定 + 判定点
+        if (countOnly) return count;
+
+        int next = 0;//次に振り分ける判定点の番号
         for (int i = 0; i < sections.Count; i++)
         {
             var section = sections[i];
             bool isLast = i == sections.Count - 1;
             float startExpectedTime = ExpectedTime(section.from.tick);
             float endExpectedTime = ExpectedTime(section.to.tick);
-            List<float> checkpointTimes = SlideCheckpointTimes(section.from.tick, section.to.tick, !(isLast && endIsShared));
-            count += checkpointTimes.Count;
-            if (countOnly) continue;
+
+            //このセクションの判定点（始点より後で、終点の位置まで）
+            var checkpointTimes = new List<float>();
+            while (next < checkpointTicks.Count && checkpointTicks[next] <= section.to.tick + 1e-3f)
+            {
+                checkpointTimes.Add(ExpectedTime(checkpointTicks[next++]));
+            }
+
+            //終点ノーツを出すか。分岐の終点が親の中間につながる場合と、判定なしの中間は出さない
+            bool showEnd = isLast ? !endIsShared : !section.to.noJudge;
 
             GameObject obj = Instantiate(LongNotePrefab);
             LongNote longNote = obj.GetComponent<LongNote>();
@@ -411,7 +423,7 @@ public class NoteManager : MonoBehaviour
 
             longNote.Init(DisplayBar(startExpectedTime), DisplayBar(endExpectedTime), startExpectedTime, endExpectedTime,
                           section.from.lane, section.from.width, section.to.lane, section.to.width,
-                          i == 0 && !startIsShared, isLast, !(isLast && endIsShared), checkpointTimes,
+                          i == 0 && !startIsShared, isLast, showEnd, checkpointTimes,
                           LongNote.ParseCurve(section.curve));
 
             LongNotes.Add(longNote);
@@ -419,17 +431,28 @@ public class NoteManager : MonoBehaviour
         return count;
     }
 
-    //セクション中の判定点の時刻。始点(または中間)から一定間隔で置き、終点(または次の中間)にも置く
+    //slide全体の判定点のtick（始点のタップ判定は含めない）。始点・中間から一定間隔で置き、中間と終点にも置く
     //間隔は判定点ごとにその位置のBPMで決めるので、途中でBPMが変わると次の判定から間隔が変わる
-    private List<float> SlideCheckpointTimes(float startTick, float endTick, bool includeEnd)
+    //判定なしの中間（noJudge）は判定点にせず、間隔も数え直さない（始点と終点の間の空間として扱う。エディタのgetSlideJudgePointsと同じ）
+    //includeEnd: 終点に判定点を置くか（分岐の終点が親の中間につながる場合はfalse）
+    private List<float> SlideCheckpointTicks(List<SlideSection> sections, bool includeEnd)
     {
-        var times = new List<float>();
-        for (float tick = startTick + SlideJudgeInterval(BpmAtTick(startTick)); tick < endTick - 1e-3f; tick += SlideJudgeInterval(BpmAtTick(tick)))
+        var ticks = new List<float>();
+        float fromTick = sections[0].from.tick;//間隔を数え始める位置（始点か、判定のある中間）
+        for (int i = 0; i < sections.Count; i++)
         {
-            times.Add(ExpectedTime(tick));
+            var to = sections[i].to;
+            bool isLast = i == sections.Count - 1;
+            if (!isLast && to.noJudge) continue;//判定なしの中間は飛ばして、次の判定する点までを1つの区間にする
+
+            for (float tick = fromTick + SlideJudgeInterval(BpmAtTick(fromTick)); tick < to.tick - 1e-3f; tick += SlideJudgeInterval(BpmAtTick(tick)))
+            {
+                ticks.Add(tick);
+            }
+            if (!isLast || includeEnd) ticks.Add(to.tick);
+            fromTick = to.tick;
         }
-        if (includeEnd) times.Add(ExpectedTime(endTick));
-        return times;
+        return ticks;
     }
 
     //tickの位置のノーツが判定ラインに来る時刻（曲の再生時間、秒）。譜面のオフセットを含む

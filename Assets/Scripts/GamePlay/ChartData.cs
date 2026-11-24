@@ -39,6 +39,7 @@ public class SlidePointer
     public int lane;
     public int width;
     public float tick;
+    public bool noJudge;//判定なしの中間（判定・音・ノーツ数なし。表示もしない）。中間ノーツ（最後以外のセクションのto）だけで使う
 }
 
 //譜面の"meta"部分

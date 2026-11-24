@@ -3,7 +3,7 @@ using UnityEngine;
 //タップ音（ノーツ音）。判定に合わせて鳴らす
 //  叩いた音  : tapを叩けた（sample/Tap.wav 風）。空打ちなら低い音
 //  どの音も同じ大きさに聞こえるようにそろえてある（MatchLoudness）
-//  HOLD      : holdを取れた（sample/ExTap.wav 風）
+//  HOLD      : holdを取れた（Flick.wav 風）
 //  スライド  : 始点を叩けた・中間と終点を取れた（sample/SlideStep.wav 風）。なぞっている間は継続音（sample/SlideLoop.wav 風）
 //シーンには置かず、選曲画面の設定「タップ音」が0%でないときだけGameManagerが作る
 //
@@ -15,6 +15,7 @@ using UnityEngine;
 public class TapSound : MonoBehaviour
 {
     public float volume = 0.6f;//どの音もこの大きさで鳴らす（音のデータの方で、聞こえる大きさがそろうように作ってある）
+    public float slideLoopVolumeRatio = 0.7f;//スライドの継続音だけ、ほかの音よりこの割合で小さく鳴らす（エディタの SLIDE_SUSTAIN_VOLUME_RATIO と同じ）
     public float slideLoopFadeSeconds = 0.03f;//継続音を鳴らし始める・止めるときに大きさを変える秒数（ぶつっと鳴らないように）
 
     private AudioSource source, loopSource;
@@ -78,7 +79,7 @@ public class TapSound : MonoBehaviour
     void Update()
     {
         bool tracing = JudgeManager.instance != null && JudgeManager.instance.IsTracingSlide;
-        float target = tracing ? volume * VolumeScale : 0f;
+        float target = tracing ? volume * slideLoopVolumeRatio * VolumeScale : 0f;
         float step = volume / Mathf.Max(0.001f, slideLoopFadeSeconds) * Time.unscaledDeltaTime;
         loopSource.volume = Mathf.MoveTowards(loopSource.volume, target, step);
 
@@ -169,23 +170,40 @@ public class TapSound : MonoBehaviour
         },
     };
 
-    //HOLD（ExTap.wav）：95Hz から 38Hz へ下がる重い「ドン」＋叩いた音に似た頭＋1kHz あたりのノイズの長い余韻
-    //元は3秒あるが、後ろはほとんど聞こえないので0.8秒で切る（切れ目が分からないよう、最後の0.15秒で小さくする）
+    //HOLD（Flick.wav）：1kHz・1.8kHz・3.3〜3.7kHz の「カッ」という頭＋2.5〜6kHz の短いノイズ
+    //→ 2.7〜3.4kHz に集まった響きが少しずつずれた高さで重なって揺れながら長く鳴る「シャラーン」。低い音は無い
+    //元は約1秒。0.95秒で切り、最後の0.4秒で小さくして元の消え方に合わせる
     static readonly Voice HoldVoice = new Voice
     {
-        length = 0.8f, fade = 0.15f,
+        length = 0.95f, fade = 0.4f,
         partials = new[]
         {
-            new Partial(38f, 0.35f, 0.13f, 0f, 95f, 0.06f),
-            new Partial(110f, 0.10f, 0.08f),
-            new Partial(1078f, 0.35f, 0.012f),
-            new Partial(1315f, 0.22f, 0.010f),
-            new Partial(1863f, 0.08f, 0.010f),
-            new Partial(2665f, 0.10f, 0.010f),
-            new Partial(3317f, 0.22f, 0.006f),
-            new Partial(4129f, 0.10f, 0.006f),
+            //頭の「カッ」
+            new Partial(1025f, 1.00f, 0.005f),
+            new Partial(1758f, 0.55f, 0.004f),
+            new Partial(3656f, 0.75f, 0.004f),
+            new Partial(3299f, 0.70f, 0.010f, 0.004f),
+            new Partial(1148f, 0.45f, 0.008f, 0.004f),
+            new Partial(1049f, 0.20f, 0.015f, 0.012f),
+            new Partial(1553f, 0.30f, 0.012f, 0.012f),
+            new Partial(1746f, 0.25f, 0.012f, 0.012f),
+            new Partial(1400f, 0.12f, 0.060f, 0.020f),
+            //長く鳴る響き（近い高さどうしで揺れる）
+            new Partial(2745f, 0.12f, 0.9f, 0.01f),
+            new Partial(2798f, 0.14f, 0.9f, 0.01f),
+            new Partial(2848f, 0.12f, 0.9f, 0.01f),
+            new Partial(2906f, 0.12f, 0.9f, 0.01f),
+            new Partial(2944f, 0.10f, 0.9f, 0.01f),
+            new Partial(2997f, 0.14f, 0.9f, 0.01f),
+            new Partial(3100f, 0.14f, 0.9f, 0.01f),
+            new Partial(3149f, 0.12f, 0.9f, 0.01f),
+            new Partial(3214f, 0.16f, 0.9f, 0.01f),
+            new Partial(3252f, 0.14f, 0.9f, 0.01f),
+            new Partial(3305f, 0.14f, 0.9f, 0.01f),
+            new Partial(3328f, 0.18f, 0.9f, 0.01f),
+            new Partial(3362f, 0.12f, 0.9f, 0.01f),
         },
-        noiseLevel = 0.8f, noiseDecay = 0.6f, noiseLow = 700f, noiseHigh = 1800f,
+        noiseLevel = 2.5f, noiseDecay = 0.04f, noiseLow = 2500f, noiseHigh = 6000f,
     };
 
     //スライドの始点・中間・終点（SlideStep.wav）：2.4〜4.8kHz の「チッ」→ 1.1〜1.4kHz の響き → 4kHz の「キン」。約0.12秒
