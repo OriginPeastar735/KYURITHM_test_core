@@ -4,7 +4,7 @@ using UnityEngine;
 //  叩いた音  : tapを叩けた（sample/Tap.wav 風）。空打ちなら低い音
 //  どの音も同じ大きさに聞こえるようにそろえてある（MatchLoudness）
 //  HOLD      : holdを取れた（Flick.wav 風）
-//  スライド  : 始点を叩けた・中間と終点を取れた（sample/SlideStep.wav 風）。なぞっている間は継続音（sample/SlideLoop.wav 風）
+//  スライド  : 始点を叩けた・中間と終点を取れた（sample/SlideStep.wav 風）。なぞっている間は継続音（風のような「ヒュー」。砂嵐っぽくならないよう細い帯のノイズ＋響き）
 //シーンには置かず、選曲画面の設定「タップ音」が0%でないときだけGameManagerが作る
 //
 //音は wav を読まずにコードで作る。sample の wav を測った特徴（高さ・減り方・ノイズの量）に寄せてある
@@ -15,7 +15,7 @@ using UnityEngine;
 public class TapSound : MonoBehaviour
 {
     public float volume = 0.6f;//どの音もこの大きさで鳴らす（音のデータの方で、聞こえる大きさがそろうように作ってある）
-    public float slideLoopVolumeRatio = 0.45f;//スライドの継続音だけ、ほかの音よりこの割合で小さく鳴らす（エディタの SLIDE_SUSTAIN_VOLUME_RATIO と同じ）
+    public float slideLoopVolumeRatio = 0.35f;//スライドの継続音だけ、ほかの音よりこの割合で小さく鳴らす（エディタの SLIDE_SUSTAIN_VOLUME_RATIO と同じ）
     public float holdVolumeRatio = 0.7f;//HOLDの音だけ、ほかの音よりこの割合で小さく鳴らす（エディタの HOLD_VOLUME_RATIO と同じ）
     public float slideLoopFadeSeconds = 0.03f;//継続音を鳴らし始める・止めるときに大きさを変える秒数（ぶつっと鳴らないように）
 
@@ -287,8 +287,13 @@ public class TapSound : MonoBehaviour
         for (int i = 0; i < data.Length; i++) data[i] *= scale;
     }
 
-    //スライドをなぞっている間の継続音（SlideLoop.wav）：1.0〜1.7kHz に集まった「サー」というノイズ
-    //1秒分を作り、つなぎ目が分からないようにくり返して鳴らす。大きさは全体の平均がLoudnessになるようにそろえる
+    //スライドをなぞっている間の継続音：1.3kHz あたりの細い帯だけのノイズ（風のような「ヒュー」）
+    //＋同じ高さで2Hzずらした2つの響き（ゆっくり揺れる）。砂嵐のようなザラザラ感が出ないよう、ノイズは細い帯だけ残す
+    //1秒分を作り、つなぎ目が分からないようにくり返して鳴らす（響きの高さは整数Hzなので、1秒でちょうど一周する）
+    //大きさは全体の平均がLoudnessになるようにそろえる。エディタの synthesizeSlideLoop も同じ式・同じ数値
+    const float SlideLoopCenter = 1300f;//ノイズの帯の真ん中の高さ(Hz)。響きも同じ高さ
+    const float SlideLoopQ = 5f;//ノイズの帯の細さ（大きいほど細く、口笛に近くなる）
+    const float SlideLoopToneLevel = 0.45f;//響きの大きさ（ノイズを1としたときの割合）
     public static float[] SynthesizeSlideLoop(int rate)
     {
         int samples = rate;
@@ -296,9 +301,35 @@ public class TapSound : MonoBehaviour
         var random = new SeededRandom(5678);
         for (int i = 0; i < samples; i++) data[i] = (float)(random.Next() * 2.0 - 1.0);
         //2周回して2周目を使うと、フィルターの始まりと終わりがつながり、くり返してもつなぎ目で音が途切れない
-        BandPass(data, rate, 1050f, 1700f, 2);
+        NarrowBand(data, rate, SlideLoopCenter, SlideLoopQ, 2);
+        MatchLoudness(data, samples);//いったんノイズの大きさをそろえてから響きを足す
+
+        double toneScale = Loudness * SlideLoopToneLevel / System.Math.Sqrt((1.0 + 0.8 * 0.8) / 2.0);//2つの響きを合わせた平均の大きさをToneLevelにする
+        for (int i = 0; i < samples; i++)
+        {
+            double t = (double)i / rate;
+            double tone = System.Math.Sin(2.0 * System.Math.PI * SlideLoopCenter * t)
+                        + 0.8 * System.Math.Sin(2.0 * System.Math.PI * (SlideLoopCenter + 2f) * t + 1.0);
+            data[i] += (float)(toneScale * tone);
+        }
         MatchLoudness(data, samples);
         return data;
+    }
+
+    //center Hz のまわりの細い帯だけを残す（帯を通すフィルターを2段）。passes回くり返し通して最後の結果を残す
+    static void NarrowBand(float[] data, int rate, float center, float q, int passes)
+    {
+        var filters = new[] { Biquad.BandPass(rate, center, q), Biquad.BandPass(rate, center, q) };
+        var input = (float[])data.Clone();
+        for (int pass = 0; pass < passes; pass++)
+        {
+            for (int i = 0; i < data.Length; i++)
+            {
+                float v = input[i];
+                foreach (Biquad f in filters) v = f.Process(v);
+                data[i] = v;
+            }
+        }
     }
 
     //low〜high Hz の音だけを残す（低い方と高い方をそれぞれ2回ずつ削る）。passes回くり返し通して最後の結果を残す
@@ -353,6 +384,20 @@ public class TapSound : MonoBehaviour
             else { b0 = (1.0 + cos) / 2.0; b1 = -(1.0 + cos); b2 = (1.0 + cos) / 2.0; }
             b0 /= a0; b1 /= a0; b2 /= a0;
             a1 = -2.0 * cos / a0; a2 = (1.0 - alpha) / a0;
+        }
+
+        Biquad(double b0, double b1, double b2, double a1, double a2)
+        {
+            this.b0 = b0; this.b1 = b1; this.b2 = b2; this.a1 = a1; this.a2 = a2;
+        }
+
+        //center Hz のまわりだけを通すフィルター（真ん中の大きさは変えない）。qが大きいほど通す帯が細い
+        public static Biquad BandPass(int rate, double center, double q)
+        {
+            double w = 2.0 * System.Math.PI * center / rate;
+            double alpha = System.Math.Sin(w) / (2.0 * q);
+            double a0 = 1.0 + alpha;
+            return new Biquad(alpha / a0, 0.0, -alpha / a0, -2.0 * System.Math.Cos(w) / a0, (1.0 - alpha) / a0);
         }
 
         public float Process(float x)
